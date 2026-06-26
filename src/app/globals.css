@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/* ── Solo Leveling dark palette ─────────────────────────── */
+@theme {
+  --color-base: #08080c;
+  --color-surface: #12121a;
+  --color-surface-2: #1b1b27;
+  --color-border: #262635;
+  --color-fg: #e9e9f2;
+  --color-muted: #9a9ab0;
+
+  --color-accent: #6c8cff;
+  --color-accent-2: #a855f7;
+
+  --color-protein: #ff6b6b;
+  --color-carb: #ffd166;
+  --color-fat: #4dd4ac;
+
+  --color-success: #34d399;
+  --color-danger: #f87171;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    background: var(--color-base);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    text-rendering: optimizeLegibility;
+  }
+  /* mobile-app feel: avoid text selection on chrome, allow in inputs */
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input,
+  textarea,
+  [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
