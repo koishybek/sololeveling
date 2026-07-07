@@ -44,3 +44,8 @@ next-env.d.ts
 
 # tooling caches
 .impeccable/
+
+.vercel
+
+# design reference export (huge — ships its own node_modules); kept locally only
+\# Mobile nutrition app prototype*

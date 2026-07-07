@@ -1,17 +1,25 @@
 import type { Metadata, Viewport } from "next";
+import { Onest } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { Toaster } from "@/components/toast";
+import { APP_NAME } from "@/lib/app";
 import "./globals.css";
 
+const onest = Onest({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-onest",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Олжас E-Rank — AI калории-трекер",
-  description: "AI-трекер калорий: логируй еду фото, голосом или штрихкодом.",
+  title: `${APP_NAME} — трекер калорий`,
+  description: "Считай калории легко: логируй еду фото, голосом, текстом или штрихкодом.",
   manifest: "/manifest.webmanifest",
-  applicationName: "E-Rank",
+  applicationName: APP_NAME,
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
-    title: "E-Rank",
+    statusBarStyle: "default",
+    title: APP_NAME,
   },
   icons: {
     icon: "/icon-192.png",
@@ -20,7 +28,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#08080c",
+  themeColor: "#f8f7f3",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -32,7 +40,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru">
+    <html lang="ru" className={onest.variable}>
       <body>
         {children}
         <ServiceWorkerRegister />

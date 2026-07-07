@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { Button, Card, NumberField } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import { db } from "@/lib/db/db";
 import { addWeight, dayKey, saveProfile } from "@/lib/db/repo";
 import type { Profile } from "@/lib/db/types";
@@ -37,9 +38,7 @@ export function Progress({ profile }: { profile: Profile }) {
     ? buildAnalytics({ entries: data.entries, goal, today: dayKey(), days: 14, calDays: 35 })
     : null;
 
-  const latest = weights.length
-    ? weights[weights.length - 1].weightKg
-    : profile.weightKg;
+  const latest = weights.length ? weights[weights.length - 1].weightKg : profile.weightKg;
   const start = weights.length ? weights[0].weightKg : profile.weightKg;
   const toTarget = Math.round((latest - profile.targetWeightKg) * 10) / 10;
   const changed = Math.round((latest - start) * 10) / 10;
@@ -59,28 +58,24 @@ export function Progress({ profile }: { profile: Profile }) {
 
   return (
     <div className="px-4 pt-6">
-      <h1 className="mb-4 text-xl font-semibold">Прогресс</h1>
+      <h1 className="mb-5 text-[26px] font-bold tracking-tight">Прогресс</h1>
 
       <div className="mb-4 grid grid-cols-3 gap-3">
-        <Stat label="Текущий" value={`${latest} кг`} />
-        <Stat label="Цель" value={`${profile.targetWeightKg} кг`} />
+        <Stat label="Текущий" value={`${latest}`} unit="кг" />
+        <Stat label="Цель" value={`${profile.targetWeightKg}`} unit="кг" />
         <Stat
           label="До цели"
-          value={`${toTarget > 0 ? "−" : "+"}${Math.abs(toTarget)} кг`}
+          value={`${toTarget > 0 ? "−" : "+"}${Math.abs(toTarget)}`}
+          unit="кг"
           accent
         />
       </div>
 
       <Card className="mb-4">
-        <div className="mb-2 text-sm font-medium">Записать вес сегодня</div>
+        <div className="mb-2 text-[14px] font-semibold">Записать вес сегодня</div>
         <div className="flex gap-2">
           <div className="flex-1">
-            <NumberField
-              value={value}
-              onChange={setValue}
-              suffix="кг"
-              placeholder={String(latest)}
-            />
+            <NumberField value={value} onChange={setValue} suffix="кг" placeholder={String(latest)} />
           </div>
           <Button onClick={save} disabled={!value}>
             Ок
@@ -90,11 +85,9 @@ export function Progress({ profile }: { profile: Profile }) {
 
       <Card className="mb-4">
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-sm font-medium">Динамика веса</span>
-          <span className="text-xs text-muted">
-            {changed === 0
-              ? "—"
-              : `${changed < 0 ? "−" : "+"}${Math.abs(changed)} кг`}
+          <span className="text-[14px] font-semibold">Динамика веса</span>
+          <span className="text-[13px] tabular-nums text-muted">
+            {changed === 0 ? "—" : `${changed < 0 ? "−" : "+"}${Math.abs(changed)} кг`}
           </span>
         </div>
         {weightData.length >= 2 ? (
@@ -104,19 +97,19 @@ export function Progress({ profile }: { profile: Profile }) {
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--color-muted)" }} axisLine={false} tickLine={false} />
                 <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={{ fontSize: 11, fill: "var(--color-muted)" }} axisLine={false} tickLine={false} width={40} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "var(--color-muted)" }} />
-                <Line type="monotone" dataKey="kg" stroke="var(--color-accent)" strokeWidth={2} dot={{ r: 3, fill: "var(--color-accent)" }} />
+                <Line type="monotone" dataKey="kg" stroke="var(--color-accent)" strokeWidth={2.5} dot={{ r: 3, fill: "var(--color-accent)" }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="py-6 text-center text-sm text-muted">
+          <p className="py-6 text-center text-[14px] text-muted">
             Запиши вес хотя бы дважды, чтобы увидеть график.
           </p>
         )}
       </Card>
 
-      <Card className="mb-4">
-        <div className="mb-3 text-sm font-medium">Калории · 14 дней</div>
+      <Card className="mb-6">
+        <div className="mb-3 text-[14px] font-semibold">Калории · 14 дней</div>
         {analytics && analytics.daysLogged > 0 ? (
           <div className="h-44 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -125,41 +118,53 @@ export function Progress({ profile }: { profile: Profile }) {
                 <YAxis tick={{ fontSize: 11, fill: "var(--color-muted)" }} axisLine={false} tickLine={false} width={40} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "var(--color-muted)" }} cursor={{ fill: "var(--color-surface-2)" }} />
                 <ReferenceLine y={goal.kcal} stroke="var(--color-muted)" strokeDasharray="4 4" />
-                <Bar dataKey="kcal" radius={[3, 3, 0, 0]}>
+                <Bar dataKey="kcal" radius={[4, 4, 0, 0]}>
                   {analytics.series.map((p, i) => (
-                    <Cell
-                      key={i}
-                      fill={
-                        p.kcal === 0
-                          ? "var(--color-surface-2)"
-                          : p.kcal <= p.goal
-                            ? "var(--color-accent)"
-                            : "var(--color-danger)"
-                      }
-                    />
+                    <Cell key={i} fill={p.kcal === 0 ? "var(--color-track)" : p.kcal <= p.goal ? "var(--color-accent)" : "var(--color-carb)"} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
-          <p className="py-6 text-center text-sm text-muted">
+          <p className="py-6 text-center text-[14px] text-muted">
             Логируй еду — здесь появится график калорий.
           </p>
         )}
       </Card>
 
+      {/* ── Insights ── */}
+      <div className="mb-3 text-[11px] font-semibold uppercase tracking-[1.5px] text-accent">
+        Инсайты
+      </div>
+
+      <div className="rounded-card bg-accent-soft p-5 shadow-card">
+        <div className="flex items-center gap-4">
+          <div className="grid size-14 shrink-0 place-items-center rounded-full bg-accent text-white">
+            <Icon name="flame" size={26} filled />
+          </div>
+          <div>
+            <div className="text-[36px] font-extrabold leading-none tabular-nums text-accent-hover">
+              {analytics?.streak ?? 0}
+            </div>
+            <div className="mt-1 text-[14px] font-medium text-accent-hover/80">
+              {(analytics?.streak ?? 0) === 1 ? "день подряд" : "дней подряд"}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {analytics && analytics.daysLogged > 0 && (
-        <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <Stat label="Ср. калории" value={`${analytics.avgKcal}`} />
-          <Stat label="Ср. белок" value={`${analytics.avgProtein} г`} />
+          <Stat label="Ср. белок" value={`${analytics.avgProtein}`} unit="г" />
           <Stat label="Дней залогир." value={`${analytics.daysLogged}`} />
-          <Stat label="В норме" value={`${analytics.adherencePct}%`} accent />
+          <Stat label="В норме" value={`${analytics.adherencePct}`} unit="%" accent />
         </div>
       )}
 
-      <Card>
-        <div className="mb-3 text-sm font-medium">Консистентность · 5 недель</div>
+      <Card className="mt-3">
+        <div className="mb-3 text-[14px] font-semibold">Консистентность · 5 недель</div>
         {analytics ? (
           <>
             <div className="grid grid-cols-7 gap-1.5">
@@ -168,20 +173,16 @@ export function Progress({ profile }: { profile: Profile }) {
                   key={c.date}
                   title={c.date}
                   className={cn(
-                    "aspect-square rounded",
-                    c.state === "under"
-                      ? "bg-accent"
-                      : c.state === "over"
-                        ? "bg-carb"
-                        : "bg-surface-2",
+                    "aspect-square rounded-md",
+                    c.state === "under" ? "bg-accent" : c.state === "over" ? "bg-carb" : "bg-track",
                   )}
                 />
               ))}
             </div>
-            <div className="mt-3 flex gap-4 text-xs text-muted">
+            <div className="mt-3 flex gap-4 text-[12px] text-muted">
               <Legend color="bg-accent" label="в норме" />
               <Legend color="bg-carb" label="перебор" />
-              <Legend color="bg-surface-2" label="нет лога" />
+              <Legend color="bg-track" label="нет лога" />
             </div>
           </>
         ) : null}
@@ -191,28 +192,30 @@ export function Progress({ profile }: { profile: Profile }) {
 }
 
 const tooltipStyle = {
-  background: "var(--color-surface-2)",
+  background: "var(--color-surface)",
   border: "1px solid var(--color-border)",
-  borderRadius: 12,
+  borderRadius: 14,
   fontSize: 12,
+  boxShadow: "var(--shadow-card)",
 };
 
 function Stat({
   label,
   value,
+  unit,
   accent,
 }: {
   label: string;
   value: string;
+  unit?: string;
   accent?: boolean;
 }) {
   return (
-    <Card className="p-3 text-center">
-      <div className="text-xs text-muted">{label}</div>
-      <div
-        className={`mt-1 text-lg font-semibold tabular-nums ${accent ? "text-accent" : ""}`}
-      >
+    <Card className="p-3.5 text-center">
+      <div className="text-[12px] text-muted">{label}</div>
+      <div className={cn("mt-1 text-[19px] font-bold tabular-nums", accent && "text-accent")}>
         {value}
+        {unit && <span className="text-[12px] font-normal text-muted"> {unit}</span>}
       </div>
     </Card>
   );

@@ -4,10 +4,14 @@ import type {
   AppSettings,
   DailyGoal,
   FoodItem,
+  Habit,
+  HabitLog,
+  HabitStat,
   LogEntry,
   Macros100g,
   Meal,
   Profile,
+  SystemFeed,
   WaterEntry,
   WeightEntry,
 } from "./types";
@@ -190,7 +194,7 @@ export async function getWater(date = dayKey()): Promise<number> {
 // ── backup / restore / reset ──
 
 export interface Backup {
-  version: 2;
+  version: number;
   exportedAt: number;
   profile?: Profile;
   foods: FoodItem[];
@@ -199,22 +203,38 @@ export interface Backup {
   dailyGoals: DailyGoal[];
   water: WaterEntry[];
   settings: AppSettings[];
+  habits?: Habit[];
+  habitLog?: HabitLog[];
+  system?: SystemFeed[];
 }
 
 /** Serialize all user data (except photos) to a JSON backup string. */
 export async function exportData(): Promise<string> {
-  const [profile, foods, logEntries, weights, dailyGoals, water, settings] =
-    await Promise.all([
-      db.profile.get("me"),
-      db.foods.toArray(),
-      db.logEntries.toArray(),
-      db.weights.toArray(),
-      db.dailyGoals.toArray(),
-      db.water.toArray(),
-      db.settings.toArray(),
-    ]);
+  const [
+    profile,
+    foods,
+    logEntries,
+    weights,
+    dailyGoals,
+    water,
+    settings,
+    habits,
+    habitLog,
+    systemFeeds,
+  ] = await Promise.all([
+    db.profile.get("me"),
+    db.foods.toArray(),
+    db.logEntries.toArray(),
+    db.weights.toArray(),
+    db.dailyGoals.toArray(),
+    db.water.toArray(),
+    db.settings.toArray(),
+    db.habits.toArray(),
+    db.habitLog.toArray(),
+    db.system.toArray(),
+  ]);
   const backup: Backup = {
-    version: 2,
+    version: 4,
     exportedAt: Date.now(),
     profile,
     foods,
@@ -223,6 +243,9 @@ export async function exportData(): Promise<string> {
     dailyGoals,
     water,
     settings,
+    habits,
+    habitLog,
+    system: systemFeeds,
   };
   return JSON.stringify(backup, null, 2);
 }
@@ -243,6 +266,9 @@ export async function importData(json: string): Promise<void> {
       db.dailyGoals,
       db.water,
       db.settings,
+      db.habits,
+      db.habitLog,
+      db.system,
     ],
     async () => {
       await Promise.all([
@@ -253,6 +279,9 @@ export async function importData(json: string): Promise<void> {
         db.dailyGoals.clear(),
         db.water.clear(),
         db.settings.clear(),
+        db.habits.clear(),
+        db.habitLog.clear(),
+        db.system.clear(),
       ]);
       if (b.profile) await db.profile.put(b.profile);
       if (b.foods?.length) await db.foods.bulkPut(b.foods);
@@ -261,6 +290,9 @@ export async function importData(json: string): Promise<void> {
       if (b.dailyGoals?.length) await db.dailyGoals.bulkPut(b.dailyGoals);
       if (b.water?.length) await db.water.bulkPut(b.water);
       if (b.settings?.length) await db.settings.bulkPut(b.settings);
+      if (b.habits?.length) await db.habits.bulkPut(b.habits);
+      if (b.habitLog?.length) await db.habitLog.bulkPut(b.habitLog);
+      if (b.system?.length) await db.system.bulkPut(b.system);
     },
   );
 }
@@ -278,6 +310,9 @@ export async function resetAll(): Promise<void> {
       db.water,
       db.settings,
       db.mealPhotos,
+      db.habits,
+      db.habitLog,
+      db.system,
     ],
     async () => {
       await Promise.all([
@@ -289,7 +324,108 @@ export async function resetAll(): Promise<void> {
         db.water.clear(),
         db.settings.clear(),
         db.mealPhotos.clear(),
+        db.habits.clear(),
+        db.habitLog.clear(),
+        db.system.clear(),
       ]);
     },
   );
+}
+
+// ── habits (custom daily quests) ──
+
+const DEFAULT_HABITS: Omit<Habit, "id" | "createdAt">[] = [
+  { name: "10 000 шагов", emoji: "🏃", stat: "STR", kind: "count", target: 10000, unit: "шаг", xp: 20, archived: false, order: 0 },
+  { name: "2 часа чистого кодинга", emoji: "💻", stat: "INT", kind: "count", target: 2, unit: "ч", xp: 20, archived: false, order: 1 },
+  { name: "Тренировка / зал", emoji: "🏋️", stat: "STR", kind: "bool", xp: 20, archived: false, order: 2 },
+  { name: "0 PMO", emoji: "🧘", stat: "WIL", kind: "bool", xp: 20, archived: false, order: 3 },
+  { name: "0 пива / срывов", emoji: "🚫", stat: "WIL", kind: "bool", xp: 20, archived: false, order: 4 },
+];
+
+/** Seed the default life-RPG habits once, if none exist. */
+export async function ensureDefaultHabits(): Promise<void> {
+  if ((await db.habits.count()) > 0) return;
+  const now = Date.now();
+  await db.habits.bulkAdd(
+    DEFAULT_HABITS.map((h) => ({ ...h, id: newId(), createdAt: now })),
+  );
+}
+
+export async function getActiveHabits(): Promise<Habit[]> {
+  const all = await db.habits.orderBy("order").toArray();
+  return all.filter((h) => !h.archived);
+}
+
+export async function addHabit(
+  h: Omit<Habit, "id" | "createdAt" | "order" | "archived">,
+): Promise<void> {
+  const order = await db.habits.count();
+  await db.habits.add({ ...h, id: newId(), order, archived: false, createdAt: Date.now() });
+}
+
+export async function archiveHabit(id: string): Promise<void> {
+  await db.habits.update(id, { archived: true });
+}
+
+export async function getHabitLogsForDate(date: string): Promise<HabitLog[]> {
+  return db.habitLog.where("date").equals(date).toArray();
+}
+
+export async function getAllHabitLogs(): Promise<HabitLog[]> {
+  return db.habitLog.toArray();
+}
+
+export async function setHabitDone(
+  habit: Habit,
+  done: boolean,
+  date = dayKey(),
+): Promise<void> {
+  await db.habitLog.put({
+    id: `${date}__${habit.id}`,
+    date,
+    habitId: habit.id,
+    value: done ? habit.target ?? 1 : 0,
+    done,
+  });
+}
+
+// ── AI "System" daily feed ──
+
+export async function getSystemFeed(
+  date = dayKey(),
+): Promise<SystemFeed | undefined> {
+  return db.system.get(date);
+}
+
+export async function getAllSystemFeeds(): Promise<SystemFeed[]> {
+  return db.system.toArray();
+}
+
+export async function saveSystemFeed(feed: SystemFeed): Promise<void> {
+  await db.system.put(feed);
+}
+
+/** Mark the day's AI bonus quest done/undone. */
+export async function setBonusQuestDone(
+  date: string,
+  done: boolean,
+): Promise<void> {
+  const feed = await db.system.get(date);
+  if (!feed) return;
+  await db.system.put({ ...feed, bonusDone: done });
+}
+
+/** Spend one ability point on a stat. */
+export async function allocateStat(stat: HabitStat): Promise<void> {
+  const s = (await db.settings.get("app")) ?? {
+    id: "app" as const,
+    theme: "dark" as const,
+    units: "metric" as const,
+    aiVisionModel: "gpt-4o",
+  };
+  const next: AppSettings = { ...s };
+  if (stat === "STR") next.allocStr = (s.allocStr ?? 0) + 1;
+  else if (stat === "INT") next.allocInt = (s.allocInt ?? 0) + 1;
+  else next.allocWil = (s.allocWil ?? 0) + 1;
+  await db.settings.put(next);
 }

@@ -2,9 +2,10 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Button, NumberField, Sheet } from "@/components/ui";
+import { Button, SegmentedControl, Sheet, Stepper, Tag, TextInput } from "@/components/ui";
+import { Icon, type IconName } from "@/components/icons";
 import { toast } from "@/components/toast";
-import type { CookingMethod, IdentifiedItem } from "@/lib/ai/food";
+import type { IdentifiedItem } from "@/lib/ai/food";
 import { db } from "@/lib/db/db";
 import { getRecentFoods, toggleFavorite } from "@/lib/db/repo";
 import type { FoodItem, Meal } from "@/lib/db/types";
@@ -15,7 +16,7 @@ import { commitDrafts, draftMacros } from "./commit";
 import { draftFromFood, draftFromResolved, resolveIdentified } from "./resolve";
 import type { DraftItem } from "./types";
 
-type Mode = "search" | "photo" | "voice" | "text" | "barcode";
+type Mode = "photo" | "voice" | "text" | "search" | "barcode";
 
 const MEALS: { key: Meal; label: string }[] = [
   { key: "breakfast", label: "Завтрак" },
@@ -24,22 +25,25 @@ const MEALS: { key: Meal; label: string }[] = [
   { key: "snack", label: "Перекус" },
 ];
 
-const MODES: { key: Mode; label: string; icon: string }[] = [
-  { key: "search", label: "Поиск", icon: "🔍" },
-  { key: "photo", label: "Фото", icon: "📷" },
-  { key: "voice", label: "Голос", icon: "🎤" },
-  { key: "text", label: "Текст", icon: "⌨️" },
-  { key: "barcode", label: "Код", icon: "▦" },
+const MODES: { key: Mode; label: string; icon: IconName }[] = [
+  { key: "photo", label: "Фото", icon: "camera" },
+  { key: "voice", label: "Голос", icon: "mic" },
+  { key: "text", label: "Текст", icon: "text" },
+  { key: "search", label: "Поиск", icon: "search" },
+  { key: "barcode", label: "Штрихкод", icon: "barcode" },
 ];
 
-const COOKING: { key: CookingMethod; label: string }[] = [
-  { key: "raw", label: "Сырое" },
-  { key: "boiled", label: "Варёное" },
-  { key: "grilled", label: "Гриль" },
-  { key: "baked", label: "Запечёное" },
-  { key: "sauteed", label: "Жарка" },
-  { key: "fried", label: "Фритюр" },
-];
+function mealLabel(m: Meal): string {
+  return MEALS.find((x) => x.key === m)?.label ?? "";
+}
+
+function plural(n: number): string {
+  const a = n % 10;
+  const b = n % 100;
+  if (a === 1 && b !== 11) return "позицию";
+  if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return "позиции";
+  return "позиций";
+}
 
 function defaultMeal(): Meal {
   const h = new Date().getHours();
@@ -59,7 +63,14 @@ function readDataUrl(file: File): Promise<string> {
 }
 
 function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : "Что-то пошло не так";
+  const m = e instanceof Error ? e.message : "";
+  if (
+    (typeof navigator !== "undefined" && navigator.onLine === false) ||
+    /failed to fetch|networkerror|load failed|err_name_not_resolved/i.test(m)
+  ) {
+    return "Нет соединения с интернетом — проверь сеть и попробуй ещё раз.";
+  }
+  return m || "Что-то пошло не так";
 }
 
 export function AddEntrySheet({
@@ -70,7 +81,7 @@ export function AddEntrySheet({
   onClose: () => void;
 }) {
   const [meal, setMeal] = useState<Meal>(defaultMeal);
-  const [mode, setMode] = useState<Mode>("search");
+  const [mode, setMode] = useState<Mode>("photo");
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -294,63 +305,62 @@ export function AddEntrySheet({
     onClose();
   }
 
+  const hasDrafts = drafts.length > 0;
+
   return (
-    <Sheet open={open} onClose={handleClose} title="Добавить приём пищи">
-      <div className="mb-4 grid grid-cols-4 gap-2">
-        {MEALS.map((m) => (
-          <button
-            key={m.key}
-            onClick={() => setMeal(m.key)}
-            className={cn(
-              "rounded-lg py-2 text-xs transition",
-              meal === m.key
-                ? "bg-accent text-base font-semibold"
-                : "bg-surface-2 text-muted",
-            )}
-          >
-            {m.label}
-          </button>
-        ))}
+    <Sheet open={open} onClose={handleClose} title="Добавить еду">
+      {/* meal selector */}
+      <div className="mb-4">
+        <SegmentedControl
+          options={MEALS.map((m) => ({ value: m.key, label: m.label }))}
+          value={meal}
+          onChange={(v) => setMeal(v)}
+        />
       </div>
 
-      <div className="mb-4 grid grid-cols-5 gap-1.5">
-        {MODES.map((m) => (
-          <button
+      {/* method tiles: 3 + 2 */}
+      <div className="mb-3 grid grid-cols-3 gap-2.5">
+        {MODES.slice(0, 3).map((m) => (
+          <MethodTile
             key={m.key}
+            icon={m.icon}
+            label={m.label}
+            active={mode === m.key}
             onClick={() => setMode(m.key)}
-            className={cn(
-              "flex flex-col items-center gap-1 rounded-xl border py-2.5 text-[11px] transition",
-              mode === m.key
-                ? "border-accent bg-accent/10 text-fg"
-                : "border-border bg-surface text-muted",
-            )}
-          >
-            <span className="text-base">{m.icon}</span>
-            {m.label}
-          </button>
+          />
+        ))}
+      </div>
+      <div className="mb-4 grid grid-cols-2 gap-2.5">
+        {MODES.slice(3).map((m) => (
+          <MethodTile
+            key={m.key}
+            icon={m.icon}
+            label={m.label}
+            active={mode === m.key}
+            onClick={() => setMode(m.key)}
+          />
         ))}
       </div>
 
+      {/* active method input */}
       <div className="mb-4">
         {mode === "search" && (
           <div className="space-y-3">
             <div className="flex gap-2">
-              <input
+              <TextInput
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={setQuery}
                 onKeyDown={(e) => e.key === "Enter" && doSearch()}
                 placeholder="Найти продукт в базе"
-                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-accent"
               />
-              <Button variant="outline" onClick={doSearch} disabled={searching || !query.trim()}>
+              <Button variant="secondary" className="shrink-0 px-4" onClick={doSearch} disabled={searching || !query.trim()}>
                 Найти
               </Button>
             </div>
-
             {results.length > 0 && (
               <div className="space-y-1.5">
                 {results.map((f, i) => (
-                  <FoodRow
+                  <FoodResultRow
                     key={`${f.sourceId}-${i}`}
                     name={f.name}
                     kcal100={f.per100g.kcal}
@@ -359,18 +369,11 @@ export function AddEntrySheet({
                 ))}
               </div>
             )}
-
-            {favorites.length > 0 && (
-              <QuickList title="★ Избранное" foods={favorites} onAdd={addFood} />
-            )}
-            {recent.length > 0 && (
-              <QuickList title="Недавнее" foods={recent} onAdd={addFood} />
-            )}
           </div>
         )}
 
         {mode === "photo" && (
-          <div className="space-y-2">
+          <>
             <input
               ref={fileRef}
               type="file"
@@ -383,15 +386,10 @@ export function AddEntrySheet({
                 e.target.value = "";
               }}
             />
-            <Button
-              className="w-full"
-              variant="outline"
-              disabled={!!busy}
-              onClick={() => fileRef.current?.click()}
-            >
-              📷 Сфотографировать еду
+            <Button className="w-full" disabled={!!busy} onClick={() => fileRef.current?.click()}>
+              <Icon name="camera" size={18} /> Сфотографировать еду
             </Button>
-          </div>
+          </>
         )}
 
         {mode === "voice" && (
@@ -400,18 +398,14 @@ export function AddEntrySheet({
               onClick={recording ? stopRecording : startRecording}
               disabled={!!busy}
               className={cn(
-                "grid size-20 place-items-center rounded-full text-3xl transition",
-                recording
-                  ? "bg-danger/20 text-danger [animation:pulseGlow_1s_ease-in-out_infinite]"
-                  : "bg-accent/15 text-accent",
+                "grid size-20 place-items-center rounded-full transition",
+                recording ? "animate-pulse bg-danger/15 text-danger" : "bg-accent-soft text-accent-hover",
               )}
             >
-              🎤
+              <Icon name="mic" size={30} />
             </button>
-            <p className="text-sm text-muted">
-              {recording
-                ? "Идёт запись… нажми, чтобы остановить"
-                : "Нажми и наговори, что съел"}
+            <p className="text-[14px] text-muted">
+              {recording ? "Идёт запись… нажми, чтобы остановить" : "Нажми и наговори, что съел"}
             </p>
           </div>
         )}
@@ -423,14 +417,9 @@ export function AddEntrySheet({
               onChange={(e) => setText(e.target.value)}
               placeholder="напр. 2 яйца, тост с маслом и кофе с молоком"
               rows={3}
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none focus:border-accent"
+              className="w-full rounded-[14px] bg-surface-2 px-4 py-3 text-[15px] outline-none placeholder:text-muted focus:ring-2 focus:ring-accent/40"
             />
-            <Button
-              className="w-full"
-              variant="outline"
-              disabled={!!busy || !text.trim()}
-              onClick={handleText}
-            >
+            <Button className="w-full" disabled={!!busy || !text.trim()} onClick={handleText}>
               Распознать
             </Button>
           </div>
@@ -439,98 +428,146 @@ export function AddEntrySheet({
         {mode === "barcode" && <BarcodeScanner onDetected={handleBarcode} />}
       </div>
 
-      {busy && <p className="mb-3 text-center text-sm text-accent">{busy}</p>}
+      {busy && (
+        <p className="mb-3 flex items-center justify-center gap-2 text-center text-[14px] font-medium text-accent-hover">
+          <Icon name="sparkles" size={16} /> {busy}
+        </p>
+      )}
       {error && (
-        <p className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-center text-sm text-danger">
+        <p className="mb-3 rounded-[14px] bg-danger/10 px-3 py-2.5 text-center text-[14px] text-danger">
           {error}
         </p>
       )}
 
-      {drafts.length > 0 && (
+      {/* recent / favorites — only before drafts exist */}
+      {!hasDrafts && (recent.length > 0 || favorites.length > 0) && (
         <div className="space-y-3">
+          {favorites.length > 0 && (
+            <QuickRow title="Избранное" foods={favorites} onAdd={addFood} showFav />
+          )}
+          {recent.length > 0 && (
+            <QuickRow title="Недавнее" foods={recent} onAdd={addFood} />
+          )}
+        </div>
+      )}
+
+      {/* drafts (AI scan result) */}
+      {hasDrafts && (
+        <div className="space-y-2.5">
           {drafts.map((d) => (
             <DraftCard
               key={d.key}
               draft={d}
-              onPatch={(p) => patchDraft(d.key, p)}
+              meal={mealLabel(meal)}
+              onGrams={(g) => patchDraft(d.key, { grams: g })}
+              onRename={(name) => patchDraft(d.key, { name })}
               onRemove={() => removeDraft(d.key)}
             />
           ))}
 
-          <div className="flex items-center justify-between rounded-xl bg-surface-2 px-4 py-3 text-sm">
-            <span className="text-muted">Итого</span>
-            <span className="font-semibold tabular-nums">
-              {total.kcal} ккал · Б{total.proteinG} У{total.carbG} Ж{total.fatG}
-            </span>
+          <div
+            className="sticky bottom-0 -mx-6 flex items-center gap-4 border-t border-border bg-surface px-6 pb-1 pt-3"
+          >
+            <div className="text-[22px] font-extrabold tabular-nums">
+              {total.kcal} <span className="text-[13px] font-normal text-muted">ккал</span>
+            </div>
+            <Button className="flex-1" disabled={!!busy} onClick={commit}>
+              Добавить {drafts.length} {plural(drafts.length)}
+            </Button>
           </div>
-
-          <Button className="w-full" disabled={!!busy} onClick={commit}>
-            Добавить {drafts.length}{" "}
-            {drafts.length === 1 ? "продукт" : "продукта/ов"}
-          </Button>
         </div>
       )}
     </Sheet>
   );
 }
 
-function FoodRow({
+function MethodTile({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: IconName;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 rounded-[16px] py-5 transition active:scale-[.98]",
+        active
+          ? "bg-accent-soft text-accent-hover shadow-[inset_0_0_0_1.5px_var(--color-accent)]"
+          : "bg-surface text-fg shadow-card",
+      )}
+    >
+      <Icon name={icon} size={24} />
+      <span className="text-[13px] font-semibold">{label}</span>
+    </button>
+  );
+}
+
+function FoodResultRow({
   name,
   kcal100,
   onAdd,
-  faved,
-  onToggleFav,
 }: {
   name: string;
   kcal100: number;
   onAdd: () => void;
-  faved?: boolean;
-  onToggleFav?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm">
-      <button onClick={onAdd} className="flex-1 truncate text-left">
-        {name}
-        <span className="text-muted"> · {kcal100} ккал/100г</span>
-      </button>
-      {onToggleFav && (
-        <button
-          onClick={onToggleFav}
-          aria-label="В избранное"
-          className={cn(faved ? "text-carb" : "text-muted")}
-        >
-          ★
-        </button>
-      )}
-      <button onClick={onAdd} aria-label="Добавить" className="text-lg text-accent">
-        ＋
+    <div className="flex items-center gap-3 rounded-[14px] bg-surface-2 px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[14px] font-semibold">{name}</div>
+        <div className="text-[12px] text-muted">{kcal100} ккал / 100 г</div>
+      </div>
+      <button
+        onClick={onAdd}
+        aria-label="Добавить"
+        className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white transition active:scale-90"
+      >
+        <Icon name="plus" size={16} strokeWidth={2.4} />
       </button>
     </div>
   );
 }
 
-function QuickList({
+function QuickRow({
   title,
   foods,
   onAdd,
+  showFav,
 }: {
   title: string;
   foods: FoodItem[];
   onAdd: (f: FoodItem) => void;
+  showFav?: boolean;
 }) {
   return (
     <div>
-      <div className="mb-1.5 mt-1 text-xs text-muted">{title}</div>
-      <div className="space-y-1.5">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[1.5px] text-muted">
+        {title}
+      </div>
+      <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1">
         {foods.map((f) => (
-          <FoodRow
+          <button
             key={f.id}
-            name={f.name}
-            kcal100={f.per100g.kcal}
-            onAdd={() => onAdd(f)}
-            faved={f.favorite}
-            onToggleFav={() => void toggleFavorite(f.id)}
-          />
+            onClick={() => onAdd(f)}
+            className="flex w-[190px] shrink-0 items-center gap-2.5 rounded-[14px] bg-surface p-2.5 text-left shadow-card"
+          >
+            <div className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-surface-2 text-muted">
+              <Icon name={showFav && f.favorite ? "star" : "leaf"} size={16} filled={showFav && f.favorite} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold">{f.name}</div>
+              <div className="text-[11px] text-muted">{f.per100g.kcal} ккал</div>
+            </div>
+            <div className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-hover">
+              <Icon name="plus" size={13} strokeWidth={2.6} />
+            </div>
+          </button>
         ))}
       </div>
     </div>
@@ -539,72 +576,53 @@ function QuickList({
 
 function DraftCard({
   draft,
-  onPatch,
+  meal,
+  onGrams,
+  onRename,
   onRemove,
 }: {
   draft: DraftItem;
-  onPatch: (patch: Partial<DraftItem>) => void;
+  meal: string;
+  onGrams: (g: number) => void;
+  onRename: (name: string) => void;
   onRemove: () => void;
 }) {
   const m = draftMacros(draft);
   return (
-    <div className="rounded-xl border border-border bg-surface p-3">
-      <div className="mb-2 flex items-start gap-2">
+    <div className="relative flex items-center gap-3 rounded-card bg-surface p-3.5 shadow-card">
+      <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-surface-2 text-muted">
+        <Icon name="leaf" size={22} />
+      </div>
+      <div className="min-w-0 flex-1">
         <input
           value={draft.name}
-          onChange={(e) => onPatch({ name: e.target.value })}
-          className="w-full bg-transparent text-sm font-medium outline-none"
+          onChange={(e) => onRename(e.target.value)}
+          className="w-[88%] bg-transparent text-[15px] font-bold outline-none"
         />
-        <button
-          onClick={onRemove}
-          aria-label="Удалить"
-          className="shrink-0 text-muted hover:text-danger"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="mb-2 flex items-center gap-2">
-        <div className="w-28">
-          <NumberField
-            value={String(draft.grams)}
-            onChange={(v) => onPatch({ grams: Math.max(0, Math.round(Number(v) || 0)) })}
-            suffix="г"
+        <div className="mt-0.5 text-[13px] tabular-nums text-muted">
+          {draft.grams} г · {m.kcal} ккал
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <Tag tone="sage">{meal}</Tag>
+          {draft.source === "estimate" && <Tag tone="neutral">Оценка ИИ</Tag>}
+          {draft.source === "off" && <Tag tone="neutral">Open Food Facts</Tag>}
+        </div>
+        <div className="mt-2.5">
+          <Stepper
+            value={`${draft.grams} г`}
+            decDisabled={draft.grams <= 10}
+            onDec={() => onGrams(Math.max(0, draft.grams - 10))}
+            onInc={() => onGrams(draft.grams + 10)}
           />
         </div>
-        <div className="flex-1 text-right text-sm tabular-nums">
-          <span className="font-semibold">{m.kcal}</span>
-          <span className="text-muted"> ккал</span>
-          <div className="text-xs text-muted">
-            Б{m.proteinG} · У{m.carbG} · Ж{m.fatG}
-          </div>
-        </div>
       </div>
-
-      <div className="mb-2 flex flex-wrap gap-1">
-        {COOKING.map((c) => (
-          <button
-            key={c.key}
-            onClick={() => onPatch({ cookingMethod: c.key })}
-            className={cn(
-              "rounded-full px-2.5 py-1 text-xs transition",
-              draft.cookingMethod === c.key
-                ? "bg-accent text-base"
-                : "bg-surface-2 text-muted",
-            )}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="text-[11px] text-muted">
-        {draft.source === "estimate"
-          ? "⚠ оценка ИИ (нет в базе)"
-          : draft.source === "off"
-            ? "штрихкод · Open Food Facts"
-            : "база USDA"}
-      </div>
+      <button
+        onClick={onRemove}
+        aria-label="Убрать"
+        className="absolute right-2.5 top-2.5 grid size-7 place-items-center rounded-full text-muted transition hover:text-danger"
+      >
+        <Icon name="close" size={14} strokeWidth={2.4} />
+      </button>
     </div>
   );
 }

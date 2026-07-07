@@ -1,12 +1,12 @@
 {
-  "name": "Олжас E-Rank — AI калории-трекер",
-  "short_name": "E-Rank",
-  "description": "AI-трекер калорий: фото, голос, штрихкод",
+  "name": "Calora — трекер калорий",
+  "short_name": "Calora",
+  "description": "Считай калории легко: фото, голос, текст, штрихкод",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#08080c",
-  "theme_color": "#08080c",
+  "background_color": "#f8f7f3",
+  "theme_color": "#f8f7f3",
   "orientation": "portrait",
   "lang": "ru",
   "icons": [

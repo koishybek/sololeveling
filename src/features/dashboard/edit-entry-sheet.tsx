@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, NumberField, Sheet } from "@/components/ui";
+import { Button, NumberField, SegmentedControl, Sheet } from "@/components/ui";
 import { deleteLogEntry, updateLogEntry } from "@/lib/db/repo";
 import type { LogEntry, Meal } from "@/lib/db/types";
-import { cn } from "@/lib/utils";
 
-const MEALS: { key: Meal; label: string }[] = [
-  { key: "breakfast", label: "Завтрак" },
-  { key: "lunch", label: "Обед" },
-  { key: "dinner", label: "Ужин" },
-  { key: "snack", label: "Перекус" },
+const MEALS: { value: Meal; label: string }[] = [
+  { value: "breakfast", label: "Завтрак" },
+  { value: "lunch", label: "Обед" },
+  { value: "dinner", label: "Ужин" },
+  { value: "snack", label: "Перекус" },
 ];
 
 export function EditEntrySheet({
@@ -49,30 +48,22 @@ export function EditEntrySheet({
 
   return (
     <Sheet open={Boolean(entry)} onClose={onClose} title={entry.foodName}>
-      <div className="space-y-4">
-        <div className="grid grid-cols-4 gap-2">
-          {MEALS.map((m) => (
-            <button
-              key={m.key}
-              onClick={() => setMeal(m.key)}
-              className={cn(
-                "rounded-lg py-2 text-xs transition",
-                meal === m.key
-                  ? "bg-accent text-base font-semibold"
-                  : "bg-surface-2 text-muted",
-              )}
-            >
-              {m.label}
-            </button>
-          ))}
+      <div className="space-y-5">
+        <SegmentedControl options={MEALS} value={meal} onChange={setMeal} />
+
+        <div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[1.5px] text-muted">
+            Порция
+          </div>
+          <NumberField value={grams} onChange={setGrams} suffix="г" autoFocus />
         </div>
 
-        <NumberField value={grams} onChange={setGrams} suffix="г" autoFocus />
-
-        <div className="text-sm text-muted tabular-nums">
-          ≈ {Math.round(entry.kcal * factor)} ккал · Б
-          {Math.round(entry.proteinG * factor)} · У
-          {Math.round(entry.carbG * factor)} · Ж{Math.round(entry.fatG * factor)}
+        {/* macro summary */}
+        <div className="grid grid-cols-4 gap-2">
+          <MacroCard label="Ккал" value={Math.round(entry.kcal * factor)} />
+          <MacroCard label="Белки" value={Math.round(entry.proteinG * factor)} color="var(--color-protein)" suffix="г" />
+          <MacroCard label="Углев." value={Math.round(entry.carbG * factor)} color="var(--color-carb)" suffix="г" />
+          <MacroCard label="Жиры" value={Math.round(entry.fatG * factor)} color="var(--color-fat)" suffix="г" />
         </div>
 
         <div className="flex gap-2">
@@ -85,5 +76,27 @@ export function EditEntrySheet({
         </div>
       </div>
     </Sheet>
+  );
+}
+
+function MacroCard({
+  label,
+  value,
+  color,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  color?: string;
+  suffix?: string;
+}) {
+  return (
+    <div className="rounded-[14px] bg-surface-2 px-2 py-3 text-center">
+      <div className="text-[17px] font-bold tabular-nums" style={color ? { color } : undefined}>
+        {value}
+        {suffix && <span className="text-[11px] font-normal text-muted">{suffix}</span>}
+      </div>
+      <div className="mt-0.5 text-[11px] text-muted">{label}</div>
+    </div>
   );
 }

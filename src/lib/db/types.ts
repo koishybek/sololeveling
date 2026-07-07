@@ -56,6 +56,51 @@ export interface WaterEntry {
   ml: number;
 }
 
+export type HabitStat = "STR" | "INT" | "WIL";
+export type HabitKind = "bool" | "count";
+
+/** A custom daily quest (habit) beyond food — steps, coding, no-PMO, etc. */
+export interface Habit {
+  id: string;
+  name: string;
+  emoji: string;
+  stat: HabitStat;
+  kind: HabitKind;
+  target?: number; // for count habits (e.g. 10000 steps, 2 hours)
+  unit?: string;
+  xp: number;
+  archived: boolean;
+  order: number;
+  createdAt: number;
+}
+
+/** Per-day completion record for a habit. id = `${date}__${habitId}`. */
+export interface HabitLog {
+  id: string;
+  date: string;
+  habitId: string;
+  value: number;
+  done: boolean;
+}
+
+/** An AI-generated personalized bonus quest issued by the "System". */
+export interface SystemBonusQuest {
+  title: string;
+  detail: string;
+  xp: number;
+  stat: HabitStat;
+}
+
+/** The AI "System" daily feed: in-character notices + one bonus quest.
+ *  Generated once per day from the player's real data and cached here. */
+export interface SystemFeed {
+  date: string; // YYYY-MM-DD (primary key)
+  generatedAt: number;
+  notices: string[];
+  bonusQuest: SystemBonusQuest | null;
+  bonusDone: boolean;
+}
+
 export interface DailyGoal {
   date: string; // YYYY-MM-DD (primary key)
   kcal: number;
@@ -84,10 +129,14 @@ export interface AppSettings {
   units: "metric";
   aiVisionModel: string;
   aiTextModel?: string;
+  aiSystemModel?: string;
   waterTargetMl?: number;
   lastSeenLevel?: number;
   lastSeenRank?: string;
   remindersEnabled?: boolean;
+  allocStr?: number;
+  allocInt?: number;
+  allocWil?: number;
 }
 
 export interface MealPhoto {

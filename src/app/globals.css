@@ -1,29 +1,54 @@
 @import "tailwindcss";
 
-/* ── Solo Leveling dark palette ─────────────────────────── */
+/* ── Calora — light design system ───────────────────────────
+   Source of truth: "Calora - Design System.dc.html". Warm cream
+   background, sage-green brand, coral/amber/teal macros. Light only. */
 @theme {
-  --color-base: #08080c;
-  --color-surface: #12121a;
-  --color-surface-2: #1b1b27;
-  --color-border: #262635;
-  --color-fg: #e9e9f2;
-  --color-muted: #9a9ab0;
+  /* Surfaces */
+  --color-base: #f8f7f3; /* page background (warm white) */
+  --color-surface: #ffffff; /* cards */
+  --color-surface-2: #f1f0eb; /* secondary fills: segmented bg, chips */
+  --color-track: #eceae3; /* progress-bar tracks */
+  --color-border: #edebe4; /* hairline */
+  --color-fg: #2e2e33; /* ink / primary text */
+  --color-muted: #9ca3af; /* muted text */
 
-  --color-accent: #6c8cff;
-  --color-accent-2: #a855f7;
+  /* Brand — sage */
+  --color-accent: #5fb88e;
+  --color-accent-hover: #4ea579; /* sage-dark */
+  --color-accent-active: #458f68;
+  --color-accent-soft: #e6f2ea; /* sage-soft tint */
 
-  --color-protein: #ff6b6b;
-  --color-carb: #ffd166;
-  --color-fat: #4dd4ac;
+  /* Macros + soft tints */
+  --color-protein: #f59e8b;
+  --color-protein-soft: #fce6e1;
+  --color-carb: #f5c06b;
+  --color-carb-soft: #fbefd6;
+  --color-fat: #7bc4c0;
+  --color-fat-soft: #e2f1f0;
 
-  --color-success: #34d399;
-  --color-danger: #f87171;
+  /* Status */
+  --color-success: #5fb88e;
+  --color-danger: #e4736b;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  /* Radius */
+  --radius-btn: 16px;
+  --radius-card: 20px;
+  --radius-sheet: 24px;
+
+  /* Elevation — one soft low shadow for cards + a lift */
+  --shadow-card: 0 6px 20px rgba(46, 46, 51, 0.06);
+  --shadow-lift: 0 10px 28px rgba(46, 46, 51, 0.1);
+
+  /* Type */
+  --font-sans: var(--font-onest), "Onest", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
   html,
   body {
     height: 100%;
@@ -35,8 +60,10 @@
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  /* mobile-app feel: avoid text selection on chrome, allow in inputs */
+  /* mobile-app feel: no text selection except in fields */
   * {
     -webkit-user-select: none;
     user-select: none;
@@ -49,6 +76,7 @@
   }
 }
 
+/* ── Motion (from the Calora design system) ── */
 @keyframes slideUp {
   from {
     transform: translateY(100%);
@@ -57,8 +85,23 @@
     transform: translateY(0);
   }
 }
-
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
 @keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fadeInUp {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -68,13 +111,11 @@
     transform: translateY(0);
   }
 }
-
-@keyframes pulseGlow {
-  0%,
-  100% {
-    opacity: 0.5;
+@keyframes barGrow {
+  from {
+    transform: scaleX(0);
   }
-  50% {
-    opacity: 1;
+  to {
+    transform: scaleX(1);
   }
 }

@@ -76,16 +76,16 @@ export function BarcodeScanner({
 
   if (error) {
     return (
-      <div className="rounded-xl border border-border bg-surface-2 p-4 text-center text-sm text-muted">
+      <div className="rounded-[14px] bg-surface-2 p-4 text-center text-[14px] text-muted">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="relative overflow-hidden rounded-xl bg-black">
+    <div className="relative overflow-hidden rounded-[16px] bg-black">
       <div ref={ref} className="aspect-[4/3] w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover [&_canvas]:hidden" />
-      <div className="pointer-events-none absolute inset-x-8 top-1/2 h-0.5 -translate-y-1/2 bg-accent/80 [animation:pulseGlow_1.2s_ease-in-out_infinite]" />
+      <div className="pointer-events-none absolute inset-x-8 top-1/2 h-0.5 -translate-y-1/2 animate-pulse bg-accent" />
     </div>
   );
 }

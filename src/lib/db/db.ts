@@ -3,9 +3,12 @@ import type {
   AppSettings,
   DailyGoal,
   FoodItem,
+  Habit,
+  HabitLog,
   LogEntry,
   MealPhoto,
   Profile,
+  SystemFeed,
   WaterEntry,
   WeightEntry,
 } from "./types";
@@ -23,6 +26,9 @@ export class ERankDB extends Dexie {
   settings!: Table<AppSettings, string>;
   mealPhotos!: Table<MealPhoto, string>;
   water!: Table<WaterEntry, string>;
+  habits!: Table<Habit, string>;
+  habitLog!: Table<HabitLog, string>;
+  system!: Table<SystemFeed, string>;
 
   constructor() {
     super("erank");
@@ -38,6 +44,15 @@ export class ERankDB extends Dexie {
     // v2: add water tracking
     this.version(2).stores({
       water: "date",
+    });
+    // v3: custom habits / life-RPG daily quests
+    this.version(3).stores({
+      habits: "id, order",
+      habitLog: "id, date, habitId",
+    });
+    // v4: AI "System" daily feed (notices + bonus quest), cached per day
+    this.version(4).stores({
+      system: "date",
     });
   }
 }
