@@ -2,10 +2,19 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "./db/db";
-import { dayKey, getEntriesForDate, sumEntries, type DayTotals } from "./db/repo";
-import type { DailyGoal, FoodItem, LogEntry, Profile, WeightEntry } from "./db/types";
-import { computeGame, type GameView } from "./game/engine";
-import { goalFromProfile } from "./plan";
+import {
+  dayKey,
+  getEntriesForDate,
+  sumEntries,
+  type DayTotals,
+} from "./db/repo";
+import type {
+  DailyGoal,
+  FoodItem,
+  LogEntry,
+  Profile,
+  WeightEntry,
+} from "./db/types";
 
 export function useProfileState(): { loading: boolean; profile: Profile | null } {
   const result = useLiveQuery(async () => ({
@@ -36,25 +45,6 @@ export function useWeights(): WeightEntry[] | undefined {
   return useLiveQuery(() => db.weights.orderBy("date").toArray());
 }
 
-export function useGameView(profile: Profile): GameView | undefined {
-  const data = useLiveQuery(async () => {
-    const entries = await db.logEntries.toArray();
-    const weights = await db.weights.orderBy("date").toArray();
-    const todayGoal = (await db.dailyGoals.get(dayKey())) ?? null;
-    return { entries, weights, todayGoal };
-  });
-  if (!data) return undefined;
-  const goal = data.todayGoal ?? goalFromProfile(profile);
-  const startWeightKg = data.weights[0]?.weightKg ?? profile.weightKg;
-  return computeGame({
-    entries: data.entries,
-    goal,
-    weights: data.weights,
-    today: dayKey(),
-    startWeightKg,
-  });
-}
-
 export function useRecentFoods(limit = 10): FoodItem[] | undefined {
   return useLiveQuery(async () => {
     const recent = await db.logEntries
@@ -73,5 +63,12 @@ export function useRecentFoods(limit = 10): FoodItem[] | undefined {
     }
     const foods = await db.foods.bulkGet(ids);
     return foods.filter((f): f is FoodItem => Boolean(f));
+  });
+}
+
+export function useFavorites(limit = 24): FoodItem[] | undefined {
+  return useLiveQuery(async () => {
+    const all = await db.foods.toArray();
+    return all.filter((f) => f.favorite).slice(0, limit);
   });
 }

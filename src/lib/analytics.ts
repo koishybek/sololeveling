@@ -16,7 +16,30 @@ export interface AnalyticsView {
   avgProtein: number;
   daysLogged: number;
   adherencePct: number;
+  /** Consecutive days (ending today/yesterday) with any logged food. */
+  streak: number;
   calendar: { date: string; state: DayState }[];
+}
+
+function prevDate(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+/** Streak of consecutive logged days, engine-independent (plain habit metric). */
+export function loggedStreak(
+  byDate: Map<string, unknown[]>,
+  today: string,
+): number {
+  let streak = 0;
+  let cursor = (byDate.get(today)?.length ?? 0) > 0 ? today : prevDate(today);
+  while ((byDate.get(cursor)?.length ?? 0) > 0) {
+    streak++;
+    cursor = prevDate(cursor);
+  }
+  return streak;
 }
 
 function lastDates(today: string, n: number): string[] {
@@ -90,5 +113,7 @@ export function buildAnalytics(params: {
     return { date, state };
   });
 
-  return { series, avgKcal, avgProtein, daysLogged, adherencePct, calendar };
+  const streak = loggedStreak(byDate, today);
+
+  return { series, avgKcal, avgProtein, daysLogged, adherencePct, streak, calendar };
 }

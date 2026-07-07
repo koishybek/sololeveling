@@ -47,12 +47,12 @@ export function Toaster() {
         <div
           key={t.id}
           className={cn(
-            "pointer-events-auto max-w-sm rounded-xl px-4 py-2.5 text-sm shadow-lg [animation:fadeIn_.2s_ease]",
+            "pointer-events-auto max-w-sm rounded-[14px] px-4 py-2.5 text-[14px] font-medium shadow-lift [animation:fadeInUp_.2s_ease]",
             t.type === "error"
-              ? "bg-danger text-base"
+              ? "bg-danger text-white"
               : t.type === "success"
-                ? "bg-success text-base"
-                : "bg-surface-2 text-fg ring-1 ring-border",
+                ? "bg-accent text-white"
+                : "bg-surface text-fg shadow-card",
           )}
         >
           {t.message}
