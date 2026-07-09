@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { requestPersistentStorage } from "@/lib/db/repo";
 import { AddEntrySheet } from "@/features/add-entry/add-entry-sheet";
 import { Dashboard } from "@/features/dashboard/dashboard";
 import { Foods } from "@/features/foods/foods";
@@ -8,6 +9,7 @@ import { Onboarding } from "@/features/onboarding/onboarding";
 import { Profile as ProfileScreen } from "@/features/profile/profile";
 import { Progress } from "@/features/progress/progress";
 import { Icon, type IconName } from "@/components/icons";
+import { InstallPrompt } from "@/components/install-prompt";
 import { APP_NAME } from "@/lib/app";
 import { useProfileState } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -26,12 +28,17 @@ export default function AppRoot() {
   const [tab, setTab] = useState<Tab>("diary");
   const [addOpen, setAddOpen] = useState(false);
 
+  // Ask the browser to keep our IndexedDB from being evicted.
+  useEffect(() => {
+    void requestPersistentStorage();
+  }, []);
+
   if (loading) return <Splash />;
   if (!profile) return <Onboarding />;
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-md flex-col">
-      <main className="flex-1 pb-32">
+    <div className="mx-auto flex h-dvh max-w-md flex-col overflow-hidden bg-base">
+      <main className="flex-1 overflow-y-auto overscroll-contain pb-4 [-webkit-overflow-scrolling:touch]">
         {tab === "diary" ? (
           <Dashboard profile={profile} />
         ) : tab === "progress" ? (
@@ -46,6 +53,7 @@ export default function AppRoot() {
       <BottomNav tab={tab} onTab={setTab} onAdd={() => setAddOpen(true)} />
 
       <AddEntrySheet open={addOpen} onClose={() => setAddOpen(false)} />
+      <InstallPrompt />
     </div>
   );
 }
@@ -63,8 +71,8 @@ function BottomNav({
   const right = TABS.slice(2);
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md px-4"
-      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      className="relative z-40 shrink-0 px-4 pt-1"
+      style={{ paddingBottom: "max(0.6rem, env(safe-area-inset-bottom))" }}
     >
       <div className="relative flex items-center justify-between rounded-[24px] border border-border bg-surface px-2 py-3 shadow-card">
         {left.map((t) => (

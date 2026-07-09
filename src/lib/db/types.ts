@@ -24,6 +24,8 @@ export interface FoodItem {
   per100g: Macros100g;
   isWholeFood: boolean;
   favorite?: boolean;
+  /** Thumbnail: a remote image URL or a data: URL captured from a photo. */
+  imageUrl?: string;
   createdAt: number;
 }
 
@@ -40,7 +42,9 @@ export interface LogEntry {
   carbG: number;
   fatG: number;
   dbSource: FoodSource;
-  // ── Phase 2 (RPG) signals, captured now at zero extra cost ──
+  /** Denormalized thumbnail snapshot for fast diary rendering. */
+  imageUrl?: string;
+  // ── legacy RPG signals, still captured (inert since the Calora pivot) ──
   correctionMade: boolean;
   isWholeFood: boolean;
   createdAt: number;
@@ -134,6 +138,10 @@ export interface AppSettings {
   lastSeenLevel?: number;
   lastSeenRank?: string;
   remindersEnabled?: boolean;
+  /** Epoch ms of the last successful JSON backup download. */
+  lastBackupAt?: number;
+  /** Epoch ms the backup reminder was last snoozed. */
+  backupReminderSnoozedAt?: number;
   allocStr?: number;
   allocInt?: number;
   allocWil?: number;

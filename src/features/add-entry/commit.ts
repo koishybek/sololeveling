@@ -43,6 +43,7 @@ export async function commitDrafts(drafts: DraftItem[], meal: Meal): Promise<voi
       brand: d.brand,
       per100g: d.per100g,
       isWholeFood: d.isWholeFood,
+      imageUrl: d.imageUrl,
     });
     const m = draftMacros(d);
     const entry: LogEntry = {
@@ -57,6 +58,7 @@ export async function commitDrafts(drafts: DraftItem[], meal: Meal): Promise<voi
       carbG: m.carbG,
       fatG: m.fatG,
       dbSource: d.source,
+      imageUrl: d.imageUrl,
       correctionMade: d.correctionMade,
       isWholeFood: d.isWholeFood,
       createdAt: now,

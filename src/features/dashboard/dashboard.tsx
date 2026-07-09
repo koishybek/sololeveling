@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { Button, Card, MacroRow, ProgressRing } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
+import { FoodThumb } from "@/components/food-thumb";
+import { BackupReminder } from "@/components/backup-reminder";
 import { addWater, dayKey, deleteLogEntry } from "@/lib/db/repo";
 import type { LogEntry, Meal, Profile } from "@/lib/db/types";
 import { goalFromProfile } from "@/lib/plan";
@@ -77,6 +79,8 @@ export function Dashboard({ profile }: { profile: Profile }) {
           </button>
         </div>
       </header>
+
+      <BackupReminder />
 
       {/* calorie ring */}
       <div className="flex flex-col items-center">
@@ -196,9 +200,7 @@ function MealCard({
             key={e.id}
             className="flex items-center gap-3 border-t border-border py-3 first:border-t-0"
           >
-            <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-surface-2 text-muted">
-              <Icon name="leaf" size={18} />
-            </div>
+            <FoodThumb imageUrl={e.imageUrl} name={e.foodName} size={44} />
             <button onClick={() => onEdit(e)} className="min-w-0 flex-1 text-left">
               <div className="truncate text-[14px] font-semibold">{e.foodName}</div>
               <div className="text-[12px] text-muted">{e.grams} г</div>

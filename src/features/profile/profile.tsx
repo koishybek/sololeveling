@@ -5,14 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { Button, Card, NumberField, SegmentedControl, TextInput, Toggle } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { db } from "@/lib/db/db";
-import {
-  dayKey,
-  exportData,
-  importData,
-  resetAll,
-  saveProfile,
-  setDailyGoal,
-} from "@/lib/db/repo";
+import { dayKey, resetAll, saveProfile, setDailyGoal } from "@/lib/db/repo";
+import { downloadBackup, importBackupFile } from "@/lib/backup";
 import type { Profile as ProfileType } from "@/lib/db/types";
 import { computePlan } from "@/lib/nutrition/calories";
 import type { ActivityLevel, Goal, Sex } from "@/lib/nutrition/types";
@@ -131,24 +125,21 @@ export function Profile({ profile }: { profile: ProfileType }) {
   }
 
   async function doExport() {
-    const json = await exportData();
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `calora-backup-${dayKey()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast("Бэкап скачан", "success");
+    try {
+      await downloadBackup();
+      toast("Резервная копия скачана", "success");
+    } catch {
+      toast("Не удалось скачать бэкап", "error");
+    }
   }
 
   async function doImport(file: File) {
     try {
-      await importData(await file.text());
+      await importBackupFile(file);
       toast("Импортировано, перезагрузка…", "success");
       setTimeout(() => location.reload(), 800);
     } catch (e) {
-      toast("Ошибка импорта: " + (e as Error).message, "error");
+      toast((e as Error).message || "Ошибка импорта", "error");
     }
   }
 

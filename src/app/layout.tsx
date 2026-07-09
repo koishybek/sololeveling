@@ -40,8 +40,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" className={onest.variable}>
-      <body>
+    <html lang="ru" className={onest.variable} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         {children}
         <ServiceWorkerRegister />
         <Toaster />

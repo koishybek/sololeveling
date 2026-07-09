@@ -6,6 +6,8 @@ export interface DraftItem {
   key: string;
   name: string;
   grams: number;
+  /** Frozen original AI/DB estimate — the "M / standard" portion for multipliers. */
+  baseGrams: number;
   cookingMethod: CookingMethod;
   per100g: Macros100g;
   source: FoodSource;
@@ -13,7 +15,9 @@ export interface DraftItem {
   barcode?: string;
   brand?: string;
   isWholeFood: boolean;
-  /** Set true when the user edits anything — feeds Phase-2 INT XP. */
+  /** Set true when the user edits anything (kept for data continuity). */
   correctionMade: boolean;
   confidence?: number;
+  /** Thumbnail: remote URL (DB match) or a data: URL (captured photo). */
+  imageUrl?: string;
 }

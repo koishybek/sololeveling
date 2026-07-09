@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, TextInput } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { FoodThumb } from "@/components/food-thumb";
 import { toast } from "@/components/toast";
 import { addLogEntry, toggleFavorite, upsertFood } from "@/lib/db/repo";
 import type { FoodItem, Meal } from "@/lib/db/types";
@@ -87,6 +88,7 @@ export function Foods() {
               key={`${f.sourceId}-${i}`}
               name={f.name}
               kcal100={f.per100g.kcal}
+              imageUrl={f.imageUrl}
               onAdd={() => void logResolved(f)}
             />
           ))}
@@ -100,6 +102,7 @@ export function Foods() {
               key={f.id}
               name={f.name}
               kcal100={f.per100g.kcal}
+              imageUrl={f.imageUrl}
               faved
               onFav={() => void toggleFavorite(f.id)}
               onAdd={() => void logFood(f)}
@@ -115,6 +118,7 @@ export function Foods() {
               key={f.id}
               name={f.name}
               kcal100={f.per100g.kcal}
+              imageUrl={f.imageUrl}
               faved={f.favorite}
               onFav={() => void toggleFavorite(f.id)}
               onAdd={() => void logFood(f)}
@@ -147,21 +151,21 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 function Row({
   name,
   kcal100,
+  imageUrl,
   onAdd,
   faved,
   onFav,
 }: {
   name: string;
   kcal100: number;
+  imageUrl?: string;
   onAdd: () => void;
   faved?: boolean;
   onFav?: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-card bg-surface p-3 shadow-card">
-      <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-surface-2 text-muted">
-        <Icon name="leaf" size={18} />
-      </div>
+      <FoodThumb imageUrl={imageUrl} name={name} size={44} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] font-semibold">{name}</div>
         <div className="text-[12px] text-muted">{kcal100} ккал / 100 г</div>

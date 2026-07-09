@@ -23,6 +23,9 @@ export function toast(message: string, type: ToastType = "info") {
 
 export function Toaster() {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -39,7 +42,9 @@ export function Toaster() {
     return () => window.removeEventListener("erank-toast", handler);
   }, []);
 
-  if (typeof document === "undefined") return null;
+  // Render nothing on the server and on the first client paint so hydration
+  // matches; only portal after mount.
+  if (!mounted) return null;
 
   return createPortal(
     <div className="pointer-events-none fixed inset-x-0 top-3 z-[70] flex flex-col items-center gap-2 px-4">

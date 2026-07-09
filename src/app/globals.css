@@ -59,6 +59,7 @@
     font-family: var(--font-sans);
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    overflow-x: hidden;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

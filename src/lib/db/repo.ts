@@ -64,6 +64,7 @@ export async function addLogEntry(params: {
     grams: params.grams,
     ...macros,
     dbSource: params.food.source,
+    imageUrl: params.food.imageUrl,
     correctionMade: params.correctionMade ?? false,
     isWholeFood: params.food.isWholeFood,
     createdAt: Date.now(),
@@ -250,12 +251,46 @@ export async function exportData(): Promise<string> {
   return JSON.stringify(backup, null, 2);
 }
 
-/** Replace all data with a backup. Throws on malformed input. */
-export async function importData(json: string): Promise<void> {
-  const b = JSON.parse(json) as Backup;
-  if (!b || typeof b !== "object" || !Array.isArray(b.logEntries)) {
-    throw new Error("Файл бэкапа повреждён или не того формата");
+/** Parse + validate a backup JSON string, throwing friendly errors. */
+export function parseBackup(json: string): Backup {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    throw new Error("Это не JSON-файл — выбери корректный бэкап Calora.");
   }
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Файл бэкапа пустой или повреждён.");
+  }
+  const b = raw as Partial<Backup>;
+  if (typeof b.version !== "number") {
+    throw new Error("Не похоже на бэкап Calora (нет версии файла).");
+  }
+  if (!Array.isArray(b.logEntries)) {
+    throw new Error("В бэкапе нет записей питания — файл повреждён.");
+  }
+  for (const e of b.logEntries.slice(0, 50)) {
+    const x = e as unknown as Record<string, unknown> | null;
+    if (
+      !x ||
+      typeof x.id !== "string" ||
+      typeof x.date !== "string" ||
+      typeof x.kcal !== "number"
+    ) {
+      throw new Error("Формат записей не распознан — возможно, файл от другого приложения.");
+    }
+  }
+  for (const key of ["foods", "weights", "dailyGoals", "water", "settings"] as const) {
+    if (b[key] != null && !Array.isArray(b[key])) {
+      throw new Error(`Раздел «${key}» в бэкапе повреждён.`);
+    }
+  }
+  return b as Backup;
+}
+
+/** Replace all data with a validated backup. Throws on malformed input. */
+export async function importData(json: string): Promise<void> {
+  const b = parseBackup(json);
   await db.transaction(
     "rw",
     [
@@ -413,6 +448,45 @@ export async function setBonusQuestDone(
   const feed = await db.system.get(date);
   if (!feed) return;
   await db.system.put({ ...feed, bonusDone: done });
+}
+
+// ── settings & backup safety ──
+
+const DEFAULT_SETTINGS: AppSettings = {
+  id: "app",
+  theme: "dark",
+  units: "metric",
+  aiVisionModel: "gpt-4o",
+};
+
+/** Merge-patch the app settings row (creates it if absent). */
+export async function patchSettings(patch: Partial<AppSettings>): Promise<void> {
+  const cur = (await db.settings.get("app")) ?? DEFAULT_SETTINGS;
+  await db.settings.put({ ...cur, ...patch });
+}
+
+export const markBackupDone = () => patchSettings({ lastBackupAt: Date.now() });
+export const snoozeBackupReminder = () =>
+  patchSettings({ backupReminderSnoozedAt: Date.now() });
+
+/** Ask the browser to keep IndexedDB persistent (less likely to be evicted). */
+export async function requestPersistentStorage(): Promise<boolean> {
+  try {
+    if (typeof navigator !== "undefined" && navigator.storage?.persist) {
+      if (await navigator.storage.persisted()) return true;
+      return await navigator.storage.persist();
+    }
+  } catch {
+    /* not supported */
+  }
+  return false;
+}
+
+/** How many days since the last backup (Infinity if never / no data yet). */
+export function daysSinceBackup(settings: AppSettings | undefined): number {
+  const last = settings?.lastBackupAt;
+  if (!last) return Infinity;
+  return (Date.now() - last) / 86_400_000;
 }
 
 /** Spend one ability point on a stat. */

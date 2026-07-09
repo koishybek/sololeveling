@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DailyGoal, LogEntry, Meal } from "@/lib/db/types";
-import { buildAnalytics } from "./analytics";
+import { buildAnalytics, buildWeekly } from "./analytics";
 
 let n = 0;
 function entry(date: string, kcal: number, proteinG = 10, meal: Meal = "lunch"): LogEntry {
@@ -74,5 +74,39 @@ describe("buildAnalytics", () => {
     expect(byDate["2026-06-25"]).toBe("under");
     expect(byDate["2026-06-26"]).toBe("over");
     expect(byDate["2026-06-01"]).toBe("none");
+  });
+});
+
+function named(date: string, kcal: number, name: string): LogEntry {
+  return { ...entry(date, kcal), foodName: name };
+}
+
+describe("buildWeekly", () => {
+  it("summarises deficit days, top food and avg deviation over 7 days", () => {
+    const w = buildWeekly({
+      entries: [
+        named("2026-06-26", 1800, "Овсянка"),
+        named("2026-06-26", 300, "Кофе"),
+        named("2026-06-25", 2400, "Пицца"),
+        named("2026-06-24", 1900, "Овсянка"),
+        named("2026-06-10", 5000, "Старое"), // outside the 7-day window → ignored
+      ],
+      goal,
+      today: "2026-06-26",
+    });
+    expect(w.loggedDays).toBe(3);
+    // 26th: 2100 (>2000, over), 25th: 2400 (over), 24th: 1900 (under) → 1 deficit day
+    expect(w.deficitDays).toBe(1);
+    expect(w.topFood).toEqual({ name: "Овсянка", count: 2 });
+    // avgKcal = (2100+2400+1900)/3 = 2133 → delta +133
+    expect(w.avgKcal).toBe(2133);
+    expect(w.kcalDeltaAvg).toBe(133);
+  });
+
+  it("handles an empty week", () => {
+    const w = buildWeekly({ entries: [], goal, today: "2026-06-26" });
+    expect(w.loggedDays).toBe(0);
+    expect(w.topFood).toBeNull();
+    expect(w.kcalDeltaAvg).toBe(0);
   });
 });

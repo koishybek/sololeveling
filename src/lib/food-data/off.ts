@@ -17,7 +17,12 @@ interface OffProduct {
   generic_name?: string;
   brands?: string;
   nutriments?: OffNutriments;
+  image_front_small_url?: string;
+  image_small_url?: string;
 }
+
+const OFF_FIELDS =
+  "code,product_name,generic_name,brands,nutriments,image_front_small_url,image_small_url";
 
 function mapProduct(p: OffProduct, code: string): ResolvedFood {
   const n = p.nutriments ?? {};
@@ -34,12 +39,13 @@ function mapProduct(p: OffProduct, code: string): ResolvedFood {
       fatG: Math.round((n["fat_100g"] ?? 0) * 10) / 10,
     },
     isWholeFood: false,
+    imageUrl: p.image_front_small_url || p.image_small_url || undefined,
   };
 }
 
 /** Look up a barcode via Open Food Facts (live per-scan). Returns null if not found. */
 export async function offBarcode(code: string): Promise<ResolvedFood | null> {
-  const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(code)}?fields=code,product_name,generic_name,brands,nutriments`;
+  const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(code)}?fields=${OFF_FIELDS}`;
   const res = await fetch(url, {
     headers: { "User-Agent": UA },
     signal: AbortSignal.timeout(12_000),
@@ -56,7 +62,7 @@ export async function offSearch(query: string, limit = 20): Promise<ResolvedFood
   const url =
     `${OFF_BASE}/cgi/search.pl?search_terms=${encodeURIComponent(query)}` +
     `&search_simple=1&action=process&json=1&page_size=${limit}` +
-    `&fields=code,product_name,generic_name,brands,nutriments`;
+    `&fields=${OFF_FIELDS}`;
   const res = await fetch(url, {
     headers: { "User-Agent": UA },
     signal: AbortSignal.timeout(12_000),

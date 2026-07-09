@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, MacroPill, NumberField, OptionButton, ProgressRing } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
+import { FoodThumb } from "@/components/food-thumb";
+import type { IdentifiedItem } from "@/lib/ai/food";
 import { computePlan } from "@/lib/nutrition/calories";
 import type { ActivityLevel, Goal, Sex } from "@/lib/nutrition/types";
 import { addWeight, dayKey, saveProfile, setDailyGoal } from "@/lib/db/repo";
@@ -54,8 +56,44 @@ export function Onboarding() {
   const [deficit, setDeficit] = useState(500);
   const [saving, setSaving] = useState(false);
 
+  // Aha-moment demo scan (before the quiz)
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoResult, setDemoResult] = useState<IdentifiedItem[] | null>(null);
+  const [demoError, setDemoError] = useState<string | null>(null);
+
+  async function handleDemoPhoto(file: File) {
+    setDemoError(null);
+    setDemoBusy(true);
+    try {
+      const image = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result as string);
+        r.onerror = () => rej(new Error("read"));
+        r.readAsDataURL(file);
+      });
+      const resp = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "err");
+      const items = (data.items ?? []) as IdentifiedItem[];
+      if (!items.length) {
+        setDemoError("Не получилось распознать — попробуй другое фото или пропусти.");
+      } else {
+        setDemoResult(items);
+      }
+    } catch {
+      setDemoError("ИИ немного задумался. Попробуй ещё раз или пропусти этот шаг.");
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
   const stepKeys = useMemo<string[]>(() => {
-    const base = ["goal", "sex", "age", "height", "weight"];
+    const base = ["intro", "goal", "sex", "age", "height", "weight"];
     if (goal && goal !== "maintain") base.push("target");
     base.push("activity");
     if (goal && goal !== "maintain") base.push("pace");
@@ -145,10 +183,10 @@ export function Onboarding() {
   const showQuiz = QUIZ.has(current);
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-md flex-col px-5 pb-6">
+    <div className="mx-auto flex h-dvh max-w-md flex-col overflow-hidden px-5 pb-6">
       {/* progress */}
       {showQuiz && (
-        <div className="pt-3">
+        <div className="shrink-0 pt-3">
           <div className="mb-3 flex items-center">
             {step > 0 ? (
               <button
@@ -180,7 +218,69 @@ export function Onboarding() {
         </div>
       )}
 
-      <div key={current} className="flex flex-1 flex-col [animation:fadeInUp_.25s_ease]">
+      <div key={current} className="flex min-h-0 flex-1 flex-col overflow-y-auto [animation:fadeInUp_.25s_ease]">
+        {current === "intro" && (
+          <div className="flex flex-1 flex-col justify-center gap-7 py-6 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="grid size-16 place-items-center rounded-[18px] bg-accent text-white shadow-card">
+                <Icon name="leaf" size={32} />
+              </div>
+              <div>
+                <h1 className="text-[30px] font-bold leading-tight tracking-tight">
+                  Считай калории по фото
+                </h1>
+                <p className="mx-auto mt-2 max-w-[300px] text-[15px] text-muted">
+                  Сфоткай тарелку — ИИ распознает блюда и посчитает калории за пару секунд.
+                </p>
+              </div>
+            </div>
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleDemoPhoto(f);
+                e.target.value = "";
+              }}
+            />
+
+            {demoBusy && (
+              <div className="flex items-center justify-center gap-2 text-[14px] font-medium text-accent-hover">
+                <span className="size-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+                ИИ смотрит на фото…
+              </div>
+            )}
+
+            {demoResult && (
+              <div className="mx-auto w-full max-w-[340px] space-y-2 text-left">
+                <div className="mb-1 text-center text-[13px] font-semibold text-accent">
+                  ✨ ИИ распознал: {demoResult.length}{" "}
+                  {dishWord(demoResult.length)}
+                </div>
+                {demoResult.slice(0, 4).map((it, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-2xl bg-surface p-3 shadow-card">
+                    <FoodThumb name={it.name} size={40} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[14px] font-semibold">{it.name}</div>
+                      <div className="text-[12px] text-muted">≈ {Math.round(it.grams)} г</div>
+                    </div>
+                    <div className="text-[14px] font-bold tabular-nums">
+                      {Math.round((it.estimatedPer100g.kcal * it.grams) / 100)}{" "}
+                      <span className="text-[11px] font-normal text-muted">ккал</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {demoError && <p className="text-[14px] text-muted">{demoError}</p>}
+          </div>
+        )}
+
         {current === "goal" && (
           <Step title="Какая у тебя цель?">
             <div className="space-y-3">
@@ -330,18 +430,45 @@ export function Onboarding() {
       </div>
 
       {/* actions */}
+      {current === "intro" &&
+        (demoResult ? (
+          <Button className="mt-4 w-full shrink-0" onClick={() => setStep((s) => s + 1)}>
+            Класс, продолжить
+          </Button>
+        ) : (
+          <div className="mt-4 shrink-0 space-y-2">
+            <Button className="w-full" disabled={demoBusy} onClick={() => fileRef.current?.click()}>
+              <Icon name="camera" size={18} /> Сфотографировать еду
+            </Button>
+            <button
+              onClick={() => setStep((s) => s + 1)}
+              className="w-full py-2 text-[14px] font-medium text-muted"
+            >
+              Пропустить и заполнить профиль
+            </button>
+          </div>
+        ))}
+
       {showQuiz && (
-        <Button className="w-full" disabled={!canNext()} onClick={() => setStep((s) => s + 1)}>
+        <Button className="mt-4 w-full shrink-0" disabled={!canNext()} onClick={() => setStep((s) => s + 1)}>
           Далее
         </Button>
       )}
       {current === "reveal" && (
-        <Button className="w-full" disabled={saving} onClick={finish}>
+        <Button className="mt-4 w-full shrink-0" disabled={saving} onClick={finish}>
           {saving ? "Сохраняем…" : `Начать с ${APP_NAME}`}
         </Button>
       )}
     </div>
   );
+}
+
+function dishWord(n: number): string {
+  const a = n % 10;
+  const b = n % 100;
+  if (a === 1 && b !== 11) return "блюдо";
+  if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return "блюда";
+  return "блюд";
 }
 
 function Step({ title, children }: { title: string; children: React.ReactNode }) {

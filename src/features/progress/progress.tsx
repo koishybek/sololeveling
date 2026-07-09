@@ -16,10 +16,11 @@ import {
 } from "recharts";
 import { Button, Card, NumberField } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { FoodThumb } from "@/components/food-thumb";
 import { db } from "@/lib/db/db";
 import { addWeight, dayKey, saveProfile } from "@/lib/db/repo";
 import type { Profile } from "@/lib/db/types";
-import { buildAnalytics } from "@/lib/analytics";
+import { buildAnalytics, buildWeekly, type WeeklySummary } from "@/lib/analytics";
 import { goalFromProfile } from "@/lib/plan";
 import { useWeights } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,7 @@ export function Progress({ profile }: { profile: Profile }) {
   const analytics = data
     ? buildAnalytics({ entries: data.entries, goal, today: dayKey(), days: 14, calDays: 35 })
     : null;
+  const weekly = data ? buildWeekly({ entries: data.entries, goal, today: dayKey() }) : null;
 
   const latest = weights.length ? weights[weights.length - 1].weightKg : profile.weightKg;
   const start = weights.length ? weights[0].weightKg : profile.weightKg;
@@ -138,6 +140,12 @@ export function Progress({ profile }: { profile: Profile }) {
         Инсайты
       </div>
 
+      {weekly && weekly.loggedDays > 0 && (
+        <div className="mb-3">
+          <WeeklyInsights w={weekly} />
+        </div>
+      )}
+
       <div className="rounded-card bg-accent-soft p-5 shadow-card">
         <div className="flex items-center gap-4">
           <div className="grid size-14 shrink-0 place-items-center rounded-full bg-accent text-white">
@@ -198,6 +206,64 @@ const tooltipStyle = {
   fontSize: 12,
   boxShadow: "var(--shadow-card)",
 };
+
+function WeeklyInsights({ w }: { w: WeeklySummary }) {
+  const over = w.kcalDeltaAvg > 0;
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl bg-accent p-5 text-white shadow-card">
+        <div className="text-[11px] font-semibold uppercase tracking-[1.5px] text-white/80">
+          Итоги недели
+        </div>
+        <div className="mt-2 flex items-end gap-2.5">
+          <div className="text-[44px] font-extrabold leading-none tabular-nums">
+            {w.deficitDays}
+          </div>
+          <div className="pb-1.5 text-[15px] leading-tight text-white/90">
+            из {w.loggedDays} дн.
+            <br />в норме калорий
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-4">
+          <div className="text-[12px] text-muted">Откл. от нормы</div>
+          <div
+            className={cn(
+              "mt-1 text-[19px] font-bold tabular-nums",
+              over ? "text-danger" : "text-accent",
+            )}
+          >
+            {over ? "+" : ""}
+            {w.kcalDeltaAvg}
+            <span className="text-[12px] font-normal text-muted"> ккал/д</span>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-[12px] text-muted">Ср. белок</div>
+          <div className="mt-1 text-[19px] font-bold tabular-nums">
+            {w.avgProtein}
+            <span className="text-[12px] font-normal text-muted"> г/д</span>
+          </div>
+        </Card>
+      </div>
+
+      {w.topFood && (
+        <Card className="flex items-center gap-3 p-3.5">
+          <FoodThumb name={w.topFood.name} size={44} />
+          <div className="min-w-0 flex-1">
+            <div className="text-[12px] text-muted">Чаще всего на неделе</div>
+            <div className="truncate text-[15px] font-semibold">{w.topFood.name}</div>
+          </div>
+          <div className="shrink-0 rounded-full bg-surface-2 px-3 py-1 text-[13px] font-bold tabular-nums">
+            ×{w.topFood.count}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 function Stat({
   label,

@@ -363,6 +363,44 @@ export function Stepper({
   );
 }
 
+export function Slider({
+  min,
+  max,
+  step = 1,
+  value,
+  onChange,
+  className,
+}: {
+  min: number;
+  max: number;
+  step?: number;
+  value: number;
+  onChange: (v: number) => void;
+  className?: string;
+}) {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  return (
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      aria-label="Порция"
+      className={cn(
+        "h-2 w-full cursor-pointer appearance-none rounded-full outline-none",
+        "[&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_1px_4px_rgba(0,0,0,.25)] [&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-accent",
+        "[&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-[0_1px_4px_rgba(0,0,0,.25)] [&::-moz-range-thumb]:ring-2 [&::-moz-range-thumb]:ring-accent",
+        className,
+      )}
+      style={{
+        background: `linear-gradient(to right, var(--color-accent) ${pct}%, var(--color-track) ${pct}%)`,
+      }}
+    />
+  );
+}
+
 export function Toggle({
   checked,
   onChange,

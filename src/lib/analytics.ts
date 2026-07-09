@@ -117,3 +117,59 @@ export function buildAnalytics(params: {
 
   return { series, avgKcal, avgProtein, daysLogged, adherencePct, streak, calendar };
 }
+
+export interface WeeklySummary {
+  /** Days with any logged food in the last 7. */
+  loggedDays: number;
+  /** Days at/under the calorie goal. */
+  deficitDays: number;
+  /** Most frequently logged food + its count. */
+  topFood: { name: string; count: number } | null;
+  avgKcal: number;
+  avgProtein: number;
+  /** Signed average deviation from the calorie goal (negative = under). */
+  kcalDeltaAvg: number;
+}
+
+/** Product-analytics roundup over the last 7 days ("Итоги недели"). */
+export function buildWeekly(params: {
+  entries: LogEntry[];
+  goal: DailyGoal;
+  today: string;
+}): WeeklySummary {
+  const { entries, goal, today } = params;
+  const window = new Set(lastDates(today, 7));
+  const byDate = new Map<string, LogEntry[]>();
+  const foodCount = new Map<string, number>();
+
+  for (const e of entries) {
+    if (!window.has(e.date)) continue;
+    const arr = byDate.get(e.date);
+    if (arr) arr.push(e);
+    else byDate.set(e.date, [e]);
+    foodCount.set(e.foodName, (foodCount.get(e.foodName) ?? 0) + 1);
+  }
+
+  const days = [...byDate.values()];
+  const loggedDays = days.length;
+  let deficitDays = 0;
+  let kcalSum = 0;
+  let proteinSum = 0;
+  for (const es of days) {
+    const k = es.reduce((s, e) => s + e.kcal, 0);
+    proteinSum += es.reduce((s, e) => s + e.proteinG, 0);
+    kcalSum += k;
+    if (k <= goal.kcal) deficitDays++;
+  }
+
+  const avgKcal = loggedDays ? Math.round(kcalSum / loggedDays) : 0;
+  const avgProtein = loggedDays ? Math.round(proteinSum / loggedDays) : 0;
+  const kcalDeltaAvg = loggedDays ? Math.round(avgKcal - goal.kcal) : 0;
+
+  let topFood: { name: string; count: number } | null = null;
+  for (const [name, count] of foodCount) {
+    if (!topFood || count > topFood.count) topFood = { name, count };
+  }
+
+  return { loggedDays, deficitDays, topFood, avgKcal, avgProtein, kcalDeltaAvg };
+}

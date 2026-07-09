@@ -13,10 +13,12 @@ import type { DraftItem } from "./types";
  * against a branded DB here — wrong matches are worse than an honest estimate.
  */
 export async function resolveIdentified(item: IdentifiedItem): Promise<DraftItem> {
+  const grams = Math.max(1, Math.round(item.grams) || 100);
   return {
     key: newId(),
     name: item.name,
-    grams: Math.max(1, Math.round(item.grams) || 100),
+    grams,
+    baseGrams: grams,
     cookingMethod: item.cookingMethod,
     per100g: item.estimatedPer100g,
     source: "estimate",
@@ -31,6 +33,7 @@ export function draftFromResolved(food: ResolvedFood, grams = 100): DraftItem {
     key: newId(),
     name: food.name,
     grams,
+    baseGrams: grams,
     cookingMethod: "unknown",
     per100g: food.per100g,
     source: food.source,
@@ -39,6 +42,7 @@ export function draftFromResolved(food: ResolvedFood, grams = 100): DraftItem {
     brand: food.brand,
     isWholeFood: food.isWholeFood,
     correctionMade: false,
+    imageUrl: food.imageUrl,
   };
 }
 
@@ -48,6 +52,7 @@ export function draftFromFood(food: FoodItem, grams = 100): DraftItem {
     key: newId(),
     name: food.name,
     grams,
+    baseGrams: grams,
     cookingMethod: "unknown",
     per100g: food.per100g,
     source: food.source,
@@ -56,5 +61,6 @@ export function draftFromFood(food: FoodItem, grams = 100): DraftItem {
     brand: food.brand,
     isWholeFood: food.isWholeFood,
     correctionMade: false,
+    imageUrl: food.imageUrl,
   };
 }

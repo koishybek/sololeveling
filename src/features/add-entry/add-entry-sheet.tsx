@@ -2,8 +2,9 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Button, SegmentedControl, Sheet, Stepper, Tag, TextInput } from "@/components/ui";
+import { Button, SegmentedControl, Sheet, Slider, Tag, TextInput } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
+import { FoodThumb } from "@/components/food-thumb";
 import { toast } from "@/components/toast";
 import type { IdentifiedItem } from "@/lib/ai/food";
 import { db } from "@/lib/db/db";
@@ -59,6 +60,31 @@ function readDataUrl(file: File): Promise<string> {
     r.onload = () => resolve(r.result as string);
     r.onerror = () => reject(new Error("Не удалось прочитать файл"));
     r.readAsDataURL(file);
+  });
+}
+
+/** Downscale a data URL to a small square-ish JPEG thumbnail for storage. */
+function makeThumb(dataUrl: string, max = 160): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(undefined);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      } catch {
+        resolve(undefined);
+      }
+    };
+    img.onerror = () => resolve(undefined);
+    img.src = dataUrl;
   });
 }
 
@@ -120,13 +146,14 @@ export function AddEntrySheet({
     [drafts],
   );
 
-  async function addIdentified(items: IdentifiedItem[]) {
+  async function addIdentified(items: IdentifiedItem[], imageUrl?: string) {
     if (!items.length) {
       setError("Не удалось распознать еду — попробуй ещё раз или введи вручную");
       return;
     }
     const resolved = await Promise.all(items.map(resolveIdentified));
-    setDrafts((prev) => [...prev, ...resolved]);
+    const withImg = imageUrl ? resolved.map((d) => ({ ...d, imageUrl })) : resolved;
+    setDrafts((prev) => [...prev, ...withImg]);
   }
 
   function addResolved(food: ResolvedFood) {
@@ -157,6 +184,7 @@ export function AddEntrySheet({
     setError(null);
     try {
       const image = await readDataUrl(file);
+      const thumb = await makeThumb(image, 160);
       const res = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -164,7 +192,7 @@ export function AddEntrySheet({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка распознавания");
-      await addIdentified(data.items ?? []);
+      await addIdentified(data.items ?? [], thumb);
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -364,6 +392,7 @@ export function AddEntrySheet({
                     key={`${f.sourceId}-${i}`}
                     name={f.name}
                     kcal100={f.per100g.kcal}
+                    imageUrl={f.imageUrl}
                     onAdd={() => addResolved(f)}
                   />
                 ))}
@@ -429,9 +458,10 @@ export function AddEntrySheet({
       </div>
 
       {busy && (
-        <p className="mb-3 flex items-center justify-center gap-2 text-center text-[14px] font-medium text-accent-hover">
-          <Icon name="sparkles" size={16} /> {busy}
-        </p>
+        <div className="mb-3 flex items-center justify-center gap-2 text-center text-[14px] font-medium text-accent-hover">
+          <span className="size-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+          {busy}
+        </div>
       )}
       {error && (
         <p className="mb-3 rounded-[14px] bg-danger/10 px-3 py-2.5 text-center text-[14px] text-danger">
@@ -443,7 +473,7 @@ export function AddEntrySheet({
       {!hasDrafts && (recent.length > 0 || favorites.length > 0) && (
         <div className="space-y-3">
           {favorites.length > 0 && (
-            <QuickRow title="Избранное" foods={favorites} onAdd={addFood} showFav />
+            <QuickRow title="Избранное" foods={favorites} onAdd={addFood} />
           )}
           {recent.length > 0 && (
             <QuickRow title="Недавнее" foods={recent} onAdd={addFood} />
@@ -511,14 +541,17 @@ function MethodTile({
 function FoodResultRow({
   name,
   kcal100,
+  imageUrl,
   onAdd,
 }: {
   name: string;
   kcal100: number;
+  imageUrl?: string;
   onAdd: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-[14px] bg-surface-2 px-3 py-2.5">
+      <FoodThumb imageUrl={imageUrl} name={name} size={40} className="rounded-[10px]" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] font-semibold">{name}</div>
         <div className="text-[12px] text-muted">{kcal100} ккал / 100 г</div>
@@ -538,12 +571,10 @@ function QuickRow({
   title,
   foods,
   onAdd,
-  showFav,
 }: {
   title: string;
   foods: FoodItem[];
   onAdd: (f: FoodItem) => void;
-  showFav?: boolean;
 }) {
   return (
     <div>
@@ -557,9 +588,7 @@ function QuickRow({
             onClick={() => onAdd(f)}
             className="flex w-[190px] shrink-0 items-center gap-2.5 rounded-[14px] bg-surface p-2.5 text-left shadow-card"
           >
-            <div className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-surface-2 text-muted">
-              <Icon name={showFav && f.favorite ? "star" : "leaf"} size={16} filled={showFav && f.favorite} />
-            </div>
+            <FoodThumb imageUrl={f.imageUrl} name={f.name} size={40} className="rounded-[10px]" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-semibold">{f.name}</div>
               <div className="text-[11px] text-muted">{f.per100g.kcal} ккал</div>
@@ -573,6 +602,16 @@ function QuickRow({
     </div>
   );
 }
+
+const MULTIPLIERS: { label: string; f: number }[] = [
+  { label: "½", f: 0.5 },
+  { label: "S", f: 0.75 },
+  { label: "M", f: 1 },
+  { label: "L", f: 1.5 },
+  { label: "×2", f: 2 },
+];
+
+const snap = (g: number) => Math.max(5, Math.round(g / 5) * 5);
 
 function DraftCard({
   draft,
@@ -588,41 +627,102 @@ function DraftCard({
   onRemove: () => void;
 }) {
   const m = draftMacros(draft);
+  const base = draft.baseGrams || draft.grams || 100;
+  const max = Math.max(300, snap(base * 3));
+  const activeF = MULTIPLIERS.find((x) => snap(base * x.f) === draft.grams)?.f;
+  const lowConf =
+    draft.source === "estimate" && draft.confidence != null && draft.confidence < 0.6;
+
   return (
-    <div className="relative flex items-center gap-3 rounded-card bg-surface p-3.5 shadow-card">
-      <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-surface-2 text-muted">
-        <Icon name="leaf" size={22} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <input
-          value={draft.name}
-          onChange={(e) => onRename(e.target.value)}
-          className="w-[88%] bg-transparent text-[15px] font-bold outline-none"
-        />
-        <div className="mt-0.5 text-[13px] tabular-nums text-muted">
-          {draft.grams} г · {m.kcal} ккал
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          <Tag tone="sage">{meal}</Tag>
-          {draft.source === "estimate" && <Tag tone="neutral">Оценка ИИ</Tag>}
-          {draft.source === "off" && <Tag tone="neutral">Open Food Facts</Tag>}
-        </div>
-        <div className="mt-2.5">
-          <Stepper
-            value={`${draft.grams} г`}
-            decDisabled={draft.grams <= 10}
-            onDec={() => onGrams(Math.max(0, draft.grams - 10))}
-            onInc={() => onGrams(draft.grams + 10)}
+    <div className="relative rounded-2xl bg-surface p-4 shadow-card">
+      <div className="flex items-start gap-3">
+        <FoodThumb imageUrl={draft.imageUrl} name={draft.name} size={52} />
+        <div className="min-w-0 flex-1 pr-7">
+          <input
+            value={draft.name}
+            onChange={(e) => onRename(e.target.value)}
+            className="w-full bg-transparent text-[15px] font-bold outline-none"
           />
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <Tag tone="sage">{meal}</Tag>
+            {draft.source === "estimate" && <Tag tone="neutral">Оценка ИИ</Tag>}
+            {draft.source === "off" && <Tag tone="neutral">Open Food Facts</Tag>}
+          </div>
+        </div>
+        <button
+          onClick={onRemove}
+          aria-label="Убрать"
+          className="absolute right-3 top-3 grid size-7 place-items-center rounded-full text-muted transition hover:text-danger"
+        >
+          <Icon name="close" size={14} strokeWidth={2.4} />
+        </button>
+      </div>
+
+      {/* reactive macros */}
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        <MacroMini label="ккал" value={m.kcal} strong />
+        <MacroMini label="белки" value={m.proteinG} unit="г" color="var(--color-protein)" />
+        <MacroMini label="углев" value={m.carbG} unit="г" color="var(--color-carb)" />
+        <MacroMini label="жиры" value={m.fatG} unit="г" color="var(--color-fat)" />
+      </div>
+
+      {lowConf && (
+        <div className="mt-2 text-[12px] font-medium text-[#C8871F]">
+          ИИ не уверен в порции — поправь ползунком
+        </div>
+      )}
+
+      {/* portion control */}
+      <div className="mt-3.5 space-y-3">
+        <div className="flex gap-1.5">
+          {MULTIPLIERS.map((x) => (
+            <button
+              key={x.label}
+              onClick={() => onGrams(snap(base * x.f))}
+              className={cn(
+                "flex-1 rounded-full py-1.5 text-[13px] font-semibold transition active:scale-95",
+                activeF === x.f ? "bg-accent text-white" : "bg-surface-2 text-muted",
+              )}
+            >
+              {x.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <Slider min={5} max={max} step={5} value={draft.grams} onChange={onGrams} />
+          <div className="w-[54px] shrink-0 text-right text-[15px] font-bold tabular-nums">
+            {draft.grams}
+            <span className="text-[12px] font-normal text-muted"> г</span>
+          </div>
         </div>
       </div>
-      <button
-        onClick={onRemove}
-        aria-label="Убрать"
-        className="absolute right-2.5 top-2.5 grid size-7 place-items-center rounded-full text-muted transition hover:text-danger"
+    </div>
+  );
+}
+
+function MacroMini({
+  label,
+  value,
+  unit,
+  color,
+  strong,
+}: {
+  label: string;
+  value: number;
+  unit?: string;
+  color?: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="rounded-xl bg-surface-2 px-1.5 py-2 text-center">
+      <div
+        className={cn("tabular-nums", strong ? "text-[17px] font-extrabold" : "text-[15px] font-bold")}
+        style={color ? { color } : undefined}
       >
-        <Icon name="close" size={14} strokeWidth={2.4} />
-      </button>
+        {value}
+        {unit && <span className="text-[10px] font-normal text-muted">{unit}</span>}
+      </div>
+      <div className="mt-0.5 text-[10px] text-muted">{label}</div>
     </div>
   );
 }

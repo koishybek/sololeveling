@@ -36,7 +36,9 @@ export type IconName =
   | "upload"
   | "trash"
   | "scale"
-  | "dumbbell";
+  | "dumbbell"
+  | "share"
+  | "dots";
 
 const PATHS: Record<IconName, string> = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
@@ -81,6 +83,9 @@ const PATHS: Record<IconName, string> = {
     '<path d="M12 3v17"/><path d="M7 20h10"/><path d="M4 8h16"/><path d="M4 8l-2.2 4.5a2.4 2.4 0 0 0 4.4 0L4 8Z"/><path d="M20 8l-2.2 4.5a2.4 2.4 0 0 0 4.4 0L20 8Z"/>',
   dumbbell:
     '<path d="M6.5 8v8M4 9.5v5M17.5 8v8M20 9.5v5M6.5 12h11"/>',
+  share:
+    '<path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1"/>',
+  dots: '<circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>',
 };
 
 export function Icon({

@@ -9,4 +9,6 @@ export interface ResolvedFood {
   brand?: string;
   per100g: Macros100g;
   isWholeFood: boolean;
+  /** Product/food thumbnail (remote URL from the source, if any). */
+  imageUrl?: string;
 }
