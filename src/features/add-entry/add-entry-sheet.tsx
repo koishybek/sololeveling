@@ -1,37 +1,33 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Button, SegmentedControl, Sheet, Slider, Tag, TextInput } from "@/components/ui";
+import { Button, Slider, Tag } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { FoodThumb } from "@/components/food-thumb";
 import { toast } from "@/components/toast";
 import type { IdentifiedItem } from "@/lib/ai/food";
 import { db } from "@/lib/db/db";
-import { getRecentFoods, toggleFavorite } from "@/lib/db/repo";
+import { addLogEntry, dayKey, scaleMacros, toggleFavorite, upsertFood } from "@/lib/db/repo";
 import type { FoodItem, Meal } from "@/lib/db/types";
 import type { ResolvedFood } from "@/lib/food-data/types";
 import { cn } from "@/lib/utils";
-import { BarcodeScanner } from "./barcode-scanner";
 import { commitDrafts, draftMacros } from "./commit";
 import { draftFromFood, draftFromResolved, resolveIdentified } from "./resolve";
 import type { DraftItem } from "./types";
 
-type Mode = "photo" | "voice" | "text" | "search" | "barcode";
+/** What to add to: a meal and a day. Both default (by clock / today). */
+export interface AddTarget {
+  meal?: Meal;
+  date?: string;
+}
 
 const MEALS: { key: Meal; label: string }[] = [
   { key: "breakfast", label: "Завтрак" },
   { key: "lunch", label: "Обед" },
   { key: "dinner", label: "Ужин" },
   { key: "snack", label: "Перекус" },
-];
-
-const MODES: { key: Mode; label: string; icon: IconName }[] = [
-  { key: "photo", label: "Фото", icon: "camera" },
-  { key: "voice", label: "Голос", icon: "mic" },
-  { key: "text", label: "Текст", icon: "text" },
-  { key: "search", label: "Поиск", icon: "search" },
-  { key: "barcode", label: "Штрихкод", icon: "barcode" },
 ];
 
 function mealLabel(m: Meal): string {
@@ -54,37 +50,38 @@ function defaultMeal(): Meal {
   return "snack";
 }
 
-function readDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(new Error("Не удалось прочитать файл"));
-    r.readAsDataURL(file);
-  });
+function prevDay(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() - 1);
+  return dayKey(d);
 }
 
-/** Downscale a data URL to a small square-ish JPEG thumbnail for storage. */
-function makeThumb(dataUrl: string, max = 160): Promise<string | undefined> {
-  return new Promise((resolve) => {
+/** Decode an image file and re-encode it as a JPEG no larger than `max` px. */
+function imageToJpeg(src: File | string, max: number, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = typeof src === "string" ? src : URL.createObjectURL(src);
     const img = new Image();
     img.onload = () => {
       try {
         const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
         const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
         const ctx = canvas.getContext("2d");
-        if (!ctx) return resolve(undefined);
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", 0.72));
+        if (!ctx) throw new Error("canvas");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
       } catch {
-        resolve(undefined);
+        reject(new Error("Не удалось обработать фото"));
+      } finally {
+        if (typeof src !== "string") URL.revokeObjectURL(url);
       }
     };
-    img.onerror = () => resolve(undefined);
-    img.src = dataUrl;
+    img.onerror = () => {
+      if (typeof src !== "string") URL.revokeObjectURL(url);
+      reject(new Error("Не удалось открыть фото — попробуй другое"));
+    };
+    img.src = url;
   });
 }
 
@@ -99,56 +96,186 @@ function errMsg(e: unknown): string {
   return m || "Что-то пошло не так";
 }
 
+/** Read a JSON API response, tolerating non-JSON error pages (e.g. 413). */
+async function readJson<T>(res: Response, fallback: string): Promise<T> {
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) {
+    throw new Error(
+      data.error || (res.status === 413 ? "Файл слишком большой" : fallback),
+    );
+  }
+  return data;
+}
+
+/** A previously logged food with the portion it was last logged at. */
+interface RecentItem {
+  food: FoodItem;
+  grams: number;
+}
+
 export function AddEntrySheet({
-  open,
+  target,
   onClose,
 }: {
-  open: boolean;
+  target: AddTarget | null;
   onClose: () => void;
 }) {
+  const open = target !== null;
+  const date = target?.date ?? dayKey();
+  const isToday = date === dayKey();
+
   const [meal, setMeal] = useState<Meal>(defaultMeal);
-  const [mode, setMode] = useState<Mode>("photo");
+  const [mealMenu, setMealMenu] = useState(false);
+  const [tab, setTab] = useState<"recent" | "favorites">("recent");
   const [drafts, setDrafts] = useState<DraftItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ResolvedFood[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [added, setAdded] = useState<Set<string>>(new Set());
 
-  const settings = useLiveQuery(() => db.settings.get("app"));
-  const favorites =
-    useLiveQuery(async () =>
-      (await db.foods.toArray()).filter((f) => f.favorite).slice(0, 12),
-    ) ?? [];
-  const recent = useLiveQuery(() => getRecentFoods(12)) ?? [];
-
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const lastScanRef = useRef<{ code: string; t: number }>({ code: "", t: 0 });
+
+  // Fresh state every time the screen opens.
+  useEffect(() => {
+    if (!target) return;
+    setMeal(target.meal ?? defaultMeal());
+    setMealMenu(false);
+    setTab("recent");
+    setDrafts([]);
+    setQuery("");
+    setResults([]);
+    setError(null);
+    setBusy(null);
+    setPreview(null);
+    setAdded(new Set());
+  }, [target]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
+  const allFoods = useLiveQuery(() => db.foods.toArray(), []) ?? [];
+
+  const recent = useLiveQuery(async (): Promise<RecentItem[]> => {
+    const entries = await db.logEntries.orderBy("createdAt").reverse().limit(200).toArray();
+    const seen = new Set<string>();
+    const picked: { foodId: string; grams: number }[] = [];
+    for (const e of entries) {
+      const k = e.foodName.trim().toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      picked.push({ foodId: e.foodId, grams: e.grams });
+      if (picked.length >= 20) break;
+    }
+    const foods = await db.foods.bulkGet(picked.map((p) => p.foodId));
+    return picked.flatMap((p, i) => (foods[i] ? [{ food: foods[i], grams: p.grams }] : []));
+  }, []) ?? [];
+
+  const yesterday = useLiveQuery(
+    async () =>
+      (await db.logEntries.where("date").equals(prevDay(date)).toArray()).filter(
+        (e) => e.meal === meal,
+      ),
+    [date, meal],
+  ) ?? [];
+
+  const favorites = allFoods.filter((f) => f.favorite);
+
+  const q = query.trim().toLowerCase();
+  const localMatches = useMemo(
+    () => (q ? allFoods.filter((f) => f.name.toLowerCase().includes(q)).slice(0, 8) : []),
+    [allFoods, q],
+  );
+
+  // Debounced online search (Open Food Facts / USDA).
+  useEffect(() => {
+    setSearchError(null);
+    if (q.length < 2) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/food/search?q=${encodeURIComponent(q)}`, {
+          signal: ctrl.signal,
+        });
+        const d = await readJson<{ foods?: ResolvedFood[]; error?: string }>(r, "Ошибка поиска");
+        setResults(d.foods ?? []);
+        if (d.error) setSearchError(d.error);
+      } catch (e) {
+        if (!ctrl.signal.aborted) setSearchError(errMsg(e));
+      } finally {
+        if (!ctrl.signal.aborted) setSearching(false);
+      }
+    }, 450);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [q]);
 
   const total = useMemo(
-    () =>
-      drafts.reduce(
-        (acc, d) => {
-          const m = draftMacros(d);
-          return {
-            kcal: acc.kcal + m.kcal,
-            proteinG: acc.proteinG + m.proteinG,
-            carbG: acc.carbG + m.carbG,
-            fatG: acc.fatG + m.fatG,
-          };
-        },
-        { kcal: 0, proteinG: 0, carbG: 0, fatG: 0 },
-      ),
+    () => drafts.reduce((s, d) => s + draftMacros(d).kcal, 0),
     [drafts],
   );
 
+  /* ── instant add (one tap, like recents in Lifesum) ── */
+
+  function flashAdded(key: string) {
+    setAdded((prev) => new Set(prev).add(key));
+  }
+
+  async function quickAddFood(food: FoodItem, grams: number) {
+    await addLogEntry({ food, grams, meal, date });
+    flashAdded(food.id);
+    toast(`${food.name} · ${grams} г → ${mealLabel(meal)}`, "success");
+  }
+
+  async function quickAddResolved(f: ResolvedFood, key: string) {
+    const food = await upsertFood({
+      name: f.name,
+      source: f.source,
+      sourceId: f.sourceId,
+      barcode: f.barcode,
+      brand: f.brand,
+      per100g: f.per100g,
+      isWholeFood: f.isWholeFood,
+      imageUrl: f.imageUrl,
+    });
+    await addLogEntry({ food, grams: 100, meal, date });
+    flashAdded(key);
+    toast(`${f.name} · 100 г → ${mealLabel(meal)}`, "success");
+  }
+
+  async function repeatYesterday() {
+    for (const e of yesterday) {
+      const food = await db.foods.get(e.foodId);
+      if (food) await addLogEntry({ food, grams: e.grams, meal, date });
+    }
+    flashAdded("yesterday");
+    toast(`Повторили ${mealLabel(meal).toLowerCase()} со вчера`, "success");
+  }
+
+  /* ── AI: photo & voice → drafts to review ── */
+
   async function addIdentified(items: IdentifiedItem[], imageUrl?: string) {
     if (!items.length) {
-      setError("Не удалось распознать еду — попробуй ещё раз или введи вручную");
+      setError("Не удалось распознать еду — попробуй ещё раз или найди через поиск");
       return;
     }
     const resolved = await Promise.all(items.map(resolveIdentified));
@@ -156,68 +283,26 @@ export function AddEntrySheet({
     setDrafts((prev) => [...prev, ...withImg]);
   }
 
-  function addResolved(food: ResolvedFood) {
-    setDrafts((prev) => [...prev, draftFromResolved(food)]);
-  }
-  function addFood(food: FoodItem) {
-    setDrafts((prev) => [...prev, draftFromFood(food)]);
-  }
-
-  async function doSearch() {
-    if (!query.trim()) return;
-    setSearching(true);
-    setError(null);
-    try {
-      const r = await fetch(`/api/food/search?q=${encodeURIComponent(query)}`);
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Ошибка поиска");
-      setResults(d.foods ?? []);
-    } catch (e) {
-      setError(errMsg(e));
-    } finally {
-      setSearching(false);
-    }
-  }
-
   async function handlePhoto(file: File) {
     setBusy("Распознаю фото…");
     setError(null);
     try {
-      const image = await readDataUrl(file);
-      const thumb = await makeThumb(image, 160);
+      // Phone photos are 3–10 MB; the API body limit is ~4 MB.
+      const image = await imageToJpeg(file, 1280, 0.82);
+      setPreview(image);
+      const thumb = await imageToJpeg(image, 160, 0.72).catch(() => undefined);
       const res = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image, model: settings?.aiVisionModel }),
+        body: JSON.stringify({ image }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка распознавания");
+      const data = await readJson<{ items?: IdentifiedItem[] }>(res, "Ошибка распознавания");
       await addIdentified(data.items ?? [], thumb);
     } catch (e) {
       setError(errMsg(e));
     } finally {
       setBusy(null);
-    }
-  }
-
-  async function handleText() {
-    if (!text.trim()) return;
-    setBusy("Разбираю текст…");
-    setError(null);
-    try {
-      const res = await fetch("/api/parse-food", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, model: settings?.aiTextModel }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка разбора");
-      await addIdentified(data.items ?? []);
-      setText("");
-    } catch (e) {
-      setError(errMsg(e));
-    } finally {
-      setBusy(null);
+      setPreview(null);
     }
   }
 
@@ -230,13 +315,15 @@ export function AddEntrySheet({
       mr.ondataavailable = (e) => chunksRef.current.push(e.data);
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        await handleAudio(new Blob(chunksRef.current, { type: "audio/webm" }));
+        // iOS Safari records audio/mp4, Chrome audio/webm — keep the real type.
+        const type = mr.mimeType || "audio/webm";
+        await handleAudio(new Blob(chunksRef.current, { type }), type);
       };
       mr.start();
       recRef.current = mr;
       setRecording(true);
     } catch {
-      setError("Нет доступа к микрофону");
+      setError("Нет доступа к микрофону — разреши его в настройках браузера");
     }
   }
 
@@ -245,47 +332,27 @@ export function AddEntrySheet({
     setRecording(false);
   }
 
-  async function handleAudio(blob: Blob) {
+  async function handleAudio(blob: Blob, type: string) {
+    if (blob.size < 1000) {
+      setError("Запись слишком короткая — скажи, что съел, и нажми «Стоп»");
+      return;
+    }
     setBusy("Распознаю речь…");
     try {
+      const ext = /mp4|m4a|aac/.test(type) ? "m4a" : /ogg/.test(type) ? "ogg" : "webm";
       const form = new FormData();
-      form.append("audio", blob, "voice.webm");
+      form.append("audio", blob, `voice.${ext}`);
       const tr = await fetch("/api/transcribe", { method: "POST", body: form });
-      const trData = await tr.json();
-      if (!tr.ok) throw new Error(trData.error || "Ошибка распознавания речи");
-      setBusy("Разбираю еду…");
+      const { text } = await readJson<{ text: string }>(tr, "Ошибка распознавания речи");
+      if (!text?.trim()) throw new Error("Не расслышал — попробуй ещё раз");
+      setBusy(`«${text.trim()}» — разбираю…`);
       const res = await fetch("/api/parse-food", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: trData.text, model: settings?.aiTextModel }),
+        body: JSON.stringify({ text }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка разбора");
+      const data = await readJson<{ items?: IdentifiedItem[] }>(res, "Ошибка разбора");
       await addIdentified(data.items ?? []);
-    } catch (e) {
-      setError(errMsg(e));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleBarcode(code: string) {
-    const now = Date.now();
-    if (lastScanRef.current.code === code && now - lastScanRef.current.t < 3000) {
-      return;
-    }
-    lastScanRef.current = { code, t: now };
-    setBusy("Ищу по штрихкоду…");
-    setError(null);
-    try {
-      const res = await fetch(`/api/food/barcode?code=${encodeURIComponent(code)}`);
-      if (res.status === 404) {
-        setError(`Штрихкод ${code} не найден. Введи вручную через «Текст».`);
-        return;
-      }
-      const data = (await res.json()) as { food?: ResolvedFood; error?: string };
-      if (!res.ok || !data.food) throw new Error(data.error || "Ошибка поиска");
-      addResolved(data.food);
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -295,9 +362,7 @@ export function AddEntrySheet({
 
   function patchDraft(key: string, patch: Partial<DraftItem>) {
     setDrafts((prev) =>
-      prev.map((d) =>
-        d.key === key ? { ...d, ...patch, correctionMade: true } : d,
-      ),
+      prev.map((d) => (d.key === key ? { ...d, ...patch, correctionMade: true } : d)),
     );
   }
   function removeDraft(key: string) {
@@ -308,9 +373,8 @@ export function AddEntrySheet({
     if (!drafts.length) return;
     setBusy("Сохраняю…");
     try {
-      await commitDrafts(drafts, meal);
-      toast(`Добавлено в дневник (${drafts.length})`, "success");
-      reset();
+      await commitDrafts(drafts, meal, date);
+      toast(`Добавлено: ${drafts.length} ${plural(drafts.length)}`, "success");
       onClose();
     } catch (e) {
       setError(errMsg(e));
@@ -318,200 +382,394 @@ export function AddEntrySheet({
     }
   }
 
-  function reset() {
-    setDrafts([]);
-    setText("");
-    setQuery("");
-    setResults([]);
-    setError(null);
-    setBusy(null);
-    setRecording(false);
-  }
-
   function handleClose() {
-    reset();
+    if (recording) {
+      recRef.current?.stop();
+      setRecording(false);
+    }
     onClose();
   }
 
+  if (!open) return null;
+
   const hasDrafts = drafts.length > 0;
+  const dateHint = isToday
+    ? null
+    : new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(
+        new Date(`${date}T00:00:00`),
+      );
 
-  return (
-    <Sheet open={open} onClose={handleClose} title="Добавить еду">
-      {/* meal selector */}
-      <div className="mb-4">
-        <SegmentedControl
-          options={MEALS.map((m) => ({ value: m.key, label: m.label }))}
-          value={meal}
-          onChange={(v) => setMeal(v)}
-        />
-      </div>
+  return createPortal(
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-md flex-col bg-base [animation:fadeInUp_.22s_ease]">
+      {/* header */}
+      <div className="shrink-0 bg-surface px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] shadow-card">
+        <div className="relative flex items-center justify-between">
+          <button
+            onClick={handleClose}
+            aria-label="Закрыть"
+            className="grid size-11 place-items-center rounded-full bg-surface-2 transition active:scale-90"
+          >
+            <Icon name="close" size={20} strokeWidth={2.4} />
+          </button>
+          <button
+            onClick={() => setMealMenu((v) => !v)}
+            aria-expanded={mealMenu}
+            className="flex flex-col items-center"
+          >
+            <span className="flex items-center gap-1 text-[17px] font-semibold">
+              {mealLabel(meal)}
+              <Icon name="chevron-down" size={16} strokeWidth={2.4} className="text-muted" />
+            </span>
+            {dateHint && <span className="text-[12px] text-muted">{dateHint}</span>}
+          </button>
+          <div className="size-11" aria-hidden />
 
-      {/* method tiles: 3 + 2 */}
-      <div className="mb-3 grid grid-cols-3 gap-2.5">
-        {MODES.slice(0, 3).map((m) => (
-          <MethodTile
-            key={m.key}
-            icon={m.icon}
-            label={m.label}
-            active={mode === m.key}
-            onClick={() => setMode(m.key)}
-          />
-        ))}
-      </div>
-      <div className="mb-4 grid grid-cols-2 gap-2.5">
-        {MODES.slice(3).map((m) => (
-          <MethodTile
-            key={m.key}
-            icon={m.icon}
-            label={m.label}
-            active={mode === m.key}
-            onClick={() => setMode(m.key)}
-          />
-        ))}
-      </div>
-
-      {/* active method input */}
-      <div className="mb-4">
-        {mode === "search" && (
-          <div className="space-y-3">
-            <div className="flex gap-2">
-              <TextInput
-                value={query}
-                onChange={setQuery}
-                onKeyDown={(e) => e.key === "Enter" && doSearch()}
-                placeholder="Найти продукт в базе"
-              />
-              <Button variant="secondary" className="shrink-0 px-4" onClick={doSearch} disabled={searching || !query.trim()}>
-                Найти
-              </Button>
+          {mealMenu && (
+            <div className="absolute left-1/2 top-12 z-10 w-48 -translate-x-1/2 overflow-hidden rounded-[16px] bg-surface-3 shadow-lift">
+              {MEALS.map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => {
+                    setMeal(m.key);
+                    setMealMenu(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between px-4 py-3 text-left text-[15px]",
+                    m.key === meal && "font-semibold text-accent",
+                  )}
+                >
+                  {m.label}
+                  {m.key === meal && <Icon name="check" size={16} strokeWidth={2.6} />}
+                </button>
+              ))}
             </div>
-            {results.length > 0 && (
-              <div className="space-y-1.5">
-                {results.map((f, i) => (
-                  <FoodResultRow
-                    key={`${f.sourceId}-${i}`}
-                    name={f.name}
-                    kcal100={f.per100g.kcal}
-                    imageUrl={f.imageUrl}
-                    onAdd={() => addResolved(f)}
-                  />
-                ))}
+          )}
+        </div>
+
+        {/* search */}
+        <div className="mt-3 flex items-center gap-2">
+          <label className="flex flex-1 items-center gap-2 rounded-full bg-surface-2 px-4 py-3 focus-within:ring-2 focus-within:ring-accent/40">
+            <Icon name="search" size={18} className="shrink-0 text-muted" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Продукт, блюдо или бренд"
+              enterKeyHint="search"
+              className="w-full bg-transparent text-[15px] outline-none placeholder:text-muted"
+            />
+            {query && (
+              <button onClick={() => setQuery("")} aria-label="Очистить поиск" className="text-muted">
+                <Icon name="close" size={16} strokeWidth={2.4} />
+              </button>
+            )}
+          </label>
+          <button
+            onClick={() => cameraRef.current?.click()}
+            disabled={!!busy}
+            aria-label="Сфотографировать еду"
+            className="grid size-12 shrink-0 place-items-center rounded-[14px] text-accent transition active:scale-90 disabled:opacity-40"
+          >
+            <Icon name="camera" size={26} />
+          </button>
+        </div>
+      </div>
+
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handlePhoto(f);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handlePhoto(f);
+          e.target.value = "";
+        }}
+      />
+
+      {/* body */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-32 pt-4">
+        {/* AI quick actions */}
+        {!q && (
+          <div className="rounded-[18px] border border-accent/70 bg-surface p-3">
+            {recording ? (
+              <div className="flex items-center gap-3 px-1 py-1">
+                <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-danger/15 text-danger">
+                  <span className="absolute inset-0 animate-ping rounded-full bg-danger/20" />
+                  <Icon name="mic" size={22} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-semibold">Слушаю…</div>
+                  <div className="text-[13px] text-muted">Скажи, что и сколько съел</div>
+                </div>
+                <Button className="px-4 py-2.5" onClick={stopRecording}>
+                  <Icon name="stop" size={16} filled /> Стоп
+                </Button>
               </div>
+            ) : (
+              <>
+                <div className="mb-2.5 px-1 text-[15px] font-semibold">
+                  Добавь быстрее с помощью ИИ ✨
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <AiAction icon="camera" label="Камера" disabled={!!busy} onClick={() => cameraRef.current?.click()} />
+                  <AiAction icon="image" label="Галерея" disabled={!!busy} onClick={() => galleryRef.current?.click()} />
+                  <AiAction icon="mic" label="Голос" disabled={!!busy} onClick={startRecording} />
+                </div>
+              </>
             )}
           </div>
         )}
 
-        {mode === "photo" && (
+        {busy && (
+          <div className="mt-3 flex items-center gap-3 rounded-[18px] bg-surface p-3">
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="" className="size-14 shrink-0 rounded-[12px] object-cover" />
+            ) : null}
+            <span className="size-5 shrink-0 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+            <span className="min-w-0 flex-1 text-[14px] font-medium">{busy}</span>
+          </div>
+        )}
+        {error && (
+          <p className="mt-3 rounded-[14px] bg-danger/12 px-3 py-2.5 text-center text-[14px] text-danger">
+            {error}
+          </p>
+        )}
+
+        {/* drafts from AI */}
+        {hasDrafts && (
           <>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handlePhoto(f);
-                e.target.value = "";
-              }}
-            />
-            <Button className="w-full" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-              <Icon name="camera" size={18} /> Сфотографировать еду
-            </Button>
+            <ListTitle>Проверь порции</ListTitle>
+            <div className="space-y-2.5">
+              {drafts.map((d) => (
+                <DraftCard
+                  key={d.key}
+                  draft={d}
+                  onGrams={(g) => patchDraft(d.key, { grams: g })}
+                  onRename={(name) => patchDraft(d.key, { name })}
+                  onRemove={() => removeDraft(d.key)}
+                />
+              ))}
+            </div>
           </>
         )}
 
-        {mode === "voice" && (
-          <div className="flex flex-col items-center gap-3 py-2">
-            <button
-              onClick={recording ? stopRecording : startRecording}
-              disabled={!!busy}
-              className={cn(
-                "grid size-20 place-items-center rounded-full transition",
-                recording ? "animate-pulse bg-danger/15 text-danger" : "bg-accent-soft text-accent-hover",
+        {q ? (
+          <>
+            {localMatches.length > 0 && (
+              <>
+                <ListTitle>Мои продукты</ListTitle>
+                <div className="space-y-2.5">
+                  {localMatches.map((f) => (
+                    <FoodRow
+                      key={f.id}
+                      name={f.name}
+                      kcal={f.per100g.kcal}
+                      portion="100 г"
+                      imageUrl={f.imageUrl}
+                      verified={f.source === "usda" || f.source === "off"}
+                      added={added.has(f.id)}
+                      onOpen={() => setDrafts((p) => [...p, draftFromFood(f)])}
+                      onAdd={() => void quickAddFood(f, 100)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+            <ListTitle>
+              В базе продуктов
+              {searching && (
+                <span className="ml-2 inline-block size-3 animate-spin rounded-full border-2 border-muted/30 border-t-muted align-middle" />
               )}
-            >
-              <Icon name="mic" size={30} />
-            </button>
-            <p className="text-[14px] text-muted">
-              {recording ? "Идёт запись… нажми, чтобы остановить" : "Нажми и наговори, что съел"}
-            </p>
-          </div>
-        )}
+            </ListTitle>
+            {results.length > 0 ? (
+              <div className="space-y-2.5">
+                {results.map((f, i) => {
+                  const key = `r-${f.sourceId}-${i}`;
+                  return (
+                    <FoodRow
+                      key={key}
+                      name={f.name}
+                      sub={f.brand}
+                      kcal={f.per100g.kcal}
+                      portion="100 г"
+                      imageUrl={f.imageUrl}
+                      verified
+                      added={added.has(key)}
+                      onOpen={() => setDrafts((p) => [...p, draftFromResolved(f)])}
+                      onAdd={() => void quickAddResolved(f, key)}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              !searching && (
+                <p className="py-6 text-center text-[14px] text-muted">
+                  {q.length < 2
+                    ? "Введи хотя бы 2 буквы"
+                    : searchError ?? "Ничего не нашлось — попробуй сфотографировать"}
+                </p>
+              )
+            )}
+          </>
+        ) : (
+          <>
+            {/* recent / favorites tabs */}
+            <div className="mt-4 flex gap-1 rounded-full bg-surface p-1">
+              <TabIcon icon="clock" label="Недавние" active={tab === "recent"} onClick={() => setTab("recent")} />
+              <TabIcon icon="heart" label="Избранное" active={tab === "favorites"} onClick={() => setTab("favorites")} />
+            </div>
 
-        {mode === "text" && (
-          <div className="space-y-2">
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="напр. 2 яйца, тост с маслом и кофе с молоком"
-              rows={3}
-              className="w-full rounded-[14px] bg-surface-2 px-4 py-3 text-[15px] outline-none placeholder:text-muted focus:ring-2 focus:ring-accent/40"
-            />
-            <Button className="w-full" disabled={!!busy || !text.trim()} onClick={handleText}>
-              Распознать
-            </Button>
-          </div>
-        )}
+            {tab === "recent" ? (
+              <>
+                {yesterday.length > 0 && (
+                  <>
+                    <ListTitle>То же, что и вчера?</ListTitle>
+                    <div className="flex items-center gap-3 rounded-[18px] bg-surface p-4">
+                      <div className="flex -space-x-2">
+                        {yesterday.slice(0, 3).map((e) => (
+                          <FoodThumb
+                            key={e.id}
+                            imageUrl={e.imageUrl}
+                            name={e.foodName}
+                            size={36}
+                            className="rounded-full ring-2 ring-surface"
+                          />
+                        ))}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="line-clamp-2 text-[15px] font-medium">
+                          {yesterday.map((e) => e.foodName).join(", ")}
+                        </div>
+                        <div className="text-[12px] text-muted">
+                          {yesterday.reduce((s, e) => s + e.kcal, 0)} ккал
+                        </div>
+                      </div>
+                      <AddButton
+                        label="Повторить вчерашнее"
+                        done={added.has("yesterday")}
+                        onClick={() => void repeatYesterday()}
+                      />
+                    </div>
+                  </>
+                )}
 
-        {mode === "barcode" && <BarcodeScanner onDetected={handleBarcode} />}
+                <ListTitle>Недавние</ListTitle>
+                {recent.length ? (
+                  <div className="space-y-2.5">
+                    {recent.map(({ food, grams }) => (
+                      <FoodRow
+                        key={food.id}
+                        name={food.name}
+                        kcal={scaleMacros(food.per100g, grams).kcal}
+                        portion={`${grams} г`}
+                        imageUrl={food.imageUrl}
+                        verified={food.source === "usda" || food.source === "off"}
+                        added={added.has(food.id)}
+                        onOpen={() => setDrafts((p) => [...p, draftFromFood(food, grams)])}
+                        onAdd={() => void quickAddFood(food, grams)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <Empty>Здесь появится то, что ты уже ел.<br />Начни с фото или поиска 👆</Empty>
+                )}
+              </>
+            ) : favorites.length ? (
+              <>
+                <ListTitle>Избранное</ListTitle>
+                <div className="space-y-2.5">
+                  {favorites.map((f) => (
+                    <FoodRow
+                      key={f.id}
+                      name={f.name}
+                      kcal={f.per100g.kcal}
+                      portion="100 г"
+                      imageUrl={f.imageUrl}
+                      verified={f.source === "usda" || f.source === "off"}
+                      added={added.has(f.id)}
+                      onFav={() => void toggleFavorite(f.id)}
+                      faved
+                      onOpen={() => setDrafts((p) => [...p, draftFromFood(f)])}
+                      onAdd={() => void quickAddFood(f, 100)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <Empty>Отмечай продукты ♥ в разделе «Продукты» —<br />они появятся здесь.</Empty>
+            )}
+          </>
+        )}
       </div>
 
-      {busy && (
-        <div className="mb-3 flex items-center justify-center gap-2 text-center text-[14px] font-medium text-accent-hover">
-          <span className="size-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-          {busy}
-        </div>
-      )}
-      {error && (
-        <p className="mb-3 rounded-[14px] bg-danger/10 px-3 py-2.5 text-center text-[14px] text-danger">
-          {error}
-        </p>
-      )}
-
-      {/* recent / favorites — only before drafts exist */}
-      {!hasDrafts && (recent.length > 0 || favorites.length > 0) && (
-        <div className="space-y-3">
-          {favorites.length > 0 && (
-            <QuickRow title="Избранное" foods={favorites} onAdd={addFood} />
-          )}
-          {recent.length > 0 && (
-            <QuickRow title="Недавнее" foods={recent} onAdd={addFood} />
-          )}
-        </div>
-      )}
-
-      {/* drafts (AI scan result) */}
+      {/* commit bar for reviewed drafts */}
       {hasDrafts && (
-        <div className="space-y-2.5">
-          {drafts.map((d) => (
-            <DraftCard
-              key={d.key}
-              draft={d}
-              meal={mealLabel(meal)}
-              onGrams={(g) => patchDraft(d.key, { grams: g })}
-              onRename={(name) => patchDraft(d.key, { name })}
-              onRemove={() => removeDraft(d.key)}
-            />
-          ))}
-
-          <div
-            className="sticky bottom-0 -mx-6 flex items-center gap-4 border-t border-border bg-surface px-6 pb-1 pt-3"
-          >
-            <div className="text-[22px] font-extrabold tabular-nums">
-              {total.kcal} <span className="text-[13px] font-normal text-muted">ккал</span>
-            </div>
-            <Button className="flex-1" disabled={!!busy} onClick={commit}>
-              Добавить {drafts.length} {plural(drafts.length)}
-            </Button>
+        <div
+          className="absolute inset-x-0 bottom-0 flex items-center gap-4 border-t border-border bg-surface px-4 pt-3"
+          style={{ paddingBottom: "max(0.9rem, env(safe-area-inset-bottom))" }}
+        >
+          <div className="text-[22px] font-bold tabular-nums">
+            {total} <span className="text-[13px] font-normal text-muted">ккал</span>
           </div>
+          <Button className="flex-1" disabled={!!busy} onClick={commit}>
+            Добавить {drafts.length} {plural(drafts.length)}
+          </Button>
         </div>
       )}
-    </Sheet>
+    </div>,
+    document.body,
   );
 }
 
-function MethodTile({
+function ListTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-3 mt-6 text-[13px] font-semibold uppercase tracking-[1.5px] text-muted">
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="py-8 text-center text-[14px] leading-relaxed text-muted">{children}</p>;
+}
+
+function AiAction({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-1.5 rounded-[14px] bg-surface-2 py-3.5 text-accent transition active:scale-95 disabled:opacity-40"
+    >
+      <Icon name={icon} size={24} />
+      <span className="text-[13px] font-semibold text-fg">{label}</span>
+    </button>
+  );
+}
+
+function TabIcon({
   icon,
   label,
   active,
@@ -525,80 +783,87 @@ function MethodTile({
   return (
     <button
       onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
       className={cn(
-        "flex flex-col items-center justify-center gap-2 rounded-[16px] py-5 transition active:scale-[.98]",
-        active
-          ? "bg-accent-soft text-accent-hover shadow-[inset_0_0_0_1.5px_var(--color-accent)]"
-          : "bg-surface text-fg shadow-card",
+        "flex flex-1 items-center justify-center gap-2 rounded-full py-2.5 text-[13px] font-semibold transition",
+        active ? "bg-surface-3 text-accent" : "text-muted",
       )}
     >
-      <Icon name={icon} size={24} />
-      <span className="text-[13px] font-semibold">{label}</span>
+      <Icon name={icon} size={20} filled={active && icon === "heart"} />
+      {label}
     </button>
   );
 }
 
-function FoodResultRow({
-  name,
-  kcal100,
-  imageUrl,
-  onAdd,
+function AddButton({
+  label,
+  done,
+  onClick,
 }: {
-  name: string;
-  kcal100: number;
-  imageUrl?: string;
-  onAdd: () => void;
+  label: string;
+  done?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[14px] bg-surface-2 px-3 py-2.5">
-      <FoodThumb imageUrl={imageUrl} name={name} size={40} className="rounded-[10px]" />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[14px] font-semibold">{name}</div>
-        <div className="text-[12px] text-muted">{kcal100} ккал / 100 г</div>
-      </div>
-      <button
-        onClick={onAdd}
-        aria-label="Добавить"
-        className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white transition active:scale-90"
-      >
-        <Icon name="plus" size={16} strokeWidth={2.4} />
-      </button>
-    </div>
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className={cn(
+        "grid size-11 shrink-0 place-items-center rounded-full transition active:scale-90",
+        done ? "bg-accent text-on-accent" : "bg-surface-2 text-fg",
+      )}
+    >
+      <Icon name={done ? "check" : "plus"} size={20} strokeWidth={2.4} />
+    </button>
   );
 }
 
-function QuickRow({
-  title,
-  foods,
+function FoodRow({
+  name,
+  sub,
+  kcal,
+  portion,
+  imageUrl,
+  verified,
+  added,
+  faved,
+  onFav,
+  onOpen,
   onAdd,
 }: {
-  title: string;
-  foods: FoodItem[];
-  onAdd: (f: FoodItem) => void;
+  name: string;
+  sub?: string;
+  kcal: number;
+  portion: string;
+  imageUrl?: string;
+  verified?: boolean;
+  added?: boolean;
+  faved?: boolean;
+  onFav?: () => void;
+  onOpen: () => void;
+  onAdd: () => void;
 }) {
   return (
-    <div>
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[1.5px] text-muted">
-        {title}
-      </div>
-      <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1">
-        {foods.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => onAdd(f)}
-            className="flex w-[190px] shrink-0 items-center gap-2.5 rounded-[14px] bg-surface p-2.5 text-left shadow-card"
-          >
-            <FoodThumb imageUrl={f.imageUrl} name={f.name} size={40} className="rounded-[10px]" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold">{f.name}</div>
-              <div className="text-[11px] text-muted">{f.per100g.kcal} ккал</div>
-            </div>
-            <div className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-hover">
-              <Icon name="plus" size={13} strokeWidth={2.6} />
-            </div>
-          </button>
-        ))}
-      </div>
+    <div className="flex items-center gap-3 rounded-[18px] bg-surface py-3.5 pl-3.5 pr-3">
+      <FoodThumb imageUrl={imageUrl} name={name} size={44} className="rounded-full" />
+      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <div className="truncate text-[16px] font-medium">{name}</div>
+        <div className="mt-0.5 flex items-center gap-1 text-[13px] text-muted">
+          <span className="text-fg/80">{kcal} ккал</span>
+          {verified && <Icon name="verified" size={14} filled className="text-carb" />}
+        </div>
+        <div className="truncate text-[12px] text-muted">
+          ✎ · {portion}
+          {sub ? ` · ${sub}` : ""}
+        </div>
+      </button>
+      {onFav && (
+        <button onClick={onFav} aria-label={faved ? "Убрать из избранного" : "В избранное"} className={faved ? "text-protein" : "text-muted"}>
+          <Icon name="heart" size={20} filled={faved} />
+        </button>
+      )}
+      <AddButton label={`Добавить ${name}`} done={added} onClick={onAdd} />
     </div>
   );
 }
@@ -615,13 +880,11 @@ const snap = (g: number) => Math.max(5, Math.round(g / 5) * 5);
 
 function DraftCard({
   draft,
-  meal,
   onGrams,
   onRename,
   onRemove,
 }: {
   draft: DraftItem;
-  meal: string;
   onGrams: (g: number) => void;
   onRename: (name: string) => void;
   onRemove: () => void;
@@ -634,19 +897,20 @@ function DraftCard({
     draft.source === "estimate" && draft.confidence != null && draft.confidence < 0.6;
 
   return (
-    <div className="relative rounded-2xl bg-surface p-4 shadow-card">
+    <div className="relative rounded-[18px] bg-surface p-4">
       <div className="flex items-start gap-3">
         <FoodThumb imageUrl={draft.imageUrl} name={draft.name} size={52} />
         <div className="min-w-0 flex-1 pr-7">
           <input
             value={draft.name}
             onChange={(e) => onRename(e.target.value)}
-            className="w-full bg-transparent text-[15px] font-bold outline-none"
+            aria-label="Название"
+            className="w-full bg-transparent text-[16px] font-semibold outline-none"
           />
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <Tag tone="sage">{meal}</Tag>
-            {draft.source === "estimate" && <Tag tone="neutral">Оценка ИИ</Tag>}
+            {draft.source === "estimate" && <Tag tone="sage">Оценка ИИ</Tag>}
             {draft.source === "off" && <Tag tone="neutral">Open Food Facts</Tag>}
+            {draft.source === "usda" && <Tag tone="neutral">USDA</Tag>}
           </div>
         </div>
         <button
@@ -658,7 +922,6 @@ function DraftCard({
         </button>
       </div>
 
-      {/* reactive macros */}
       <div className="mt-3 grid grid-cols-4 gap-2">
         <MacroMini label="ккал" value={m.kcal} strong />
         <MacroMini label="белки" value={m.proteinG} unit="г" color="var(--color-protein)" />
@@ -667,12 +930,11 @@ function DraftCard({
       </div>
 
       {lowConf && (
-        <div className="mt-2 text-[12px] font-medium text-[#C8871F]">
+        <div className="mt-2 text-[12px] font-medium text-warn">
           ИИ не уверен в порции — поправь ползунком
         </div>
       )}
 
-      {/* portion control */}
       <div className="mt-3.5 space-y-3">
         <div className="flex gap-1.5">
           {MULTIPLIERS.map((x) => (
@@ -681,7 +943,7 @@ function DraftCard({
               onClick={() => onGrams(snap(base * x.f))}
               className={cn(
                 "flex-1 rounded-full py-1.5 text-[13px] font-semibold transition active:scale-95",
-                activeF === x.f ? "bg-accent text-white" : "bg-surface-2 text-muted",
+                activeF === x.f ? "bg-accent text-on-accent" : "bg-surface-2 text-muted",
               )}
             >
               {x.label}

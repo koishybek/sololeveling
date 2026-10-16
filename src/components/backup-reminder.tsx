@@ -40,9 +40,9 @@ export function BackupReminder() {
   }
 
   return (
-    <div className="mb-4 rounded-2xl bg-carb-soft p-4">
+    <div className="mb-4 rounded-card bg-surface p-4 shadow-card">
       <div className="flex items-start gap-3">
-        <div className="grid size-9 shrink-0 place-items-center rounded-full bg-white text-[#C8871F]">
+        <div className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-2 text-warn">
           <Icon name="download" size={18} />
         </div>
         <div className="min-w-0 flex-1">
@@ -54,7 +54,7 @@ export function BackupReminder() {
           <div className="mt-2.5 flex gap-2">
             <button
               onClick={backup}
-              className="rounded-full bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-white transition active:scale-95"
+              className="rounded-full bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-on-accent transition active:scale-95"
             >
               Скачать бэкап
             </button>

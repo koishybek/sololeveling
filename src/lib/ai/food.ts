@@ -1,5 +1,5 @@
 import type { Macros100g } from "@/lib/db/types";
-import { getOpenAI, MODELS } from "./openai";
+import { getAI, withModelFallback } from "./client";
 
 export type CookingMethod =
   | "raw"
@@ -107,46 +107,52 @@ function parseResult(content: string | null): FoodIdentification {
 /** Identify foods from a photo (data URL or remote URL). */
 export async function identifyFoodFromImage(
   imageUrl: string,
-  model: string = MODELS.vision,
 ): Promise<FoodIdentification> {
-  const res = await getOpenAI().chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Определи блюда на этом фото." },
-          { type: "image_url", image_url: { url: imageUrl } },
-        ],
-      },
-    ],
-    response_format: { type: "json_schema", json_schema: FOOD_JSON_SCHEMA },
-  });
+  const res = await withModelFallback("vision", (model) =>
+    getAI().chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Определи блюда на этом фото." },
+            { type: "image_url", image_url: { url: imageUrl } },
+          ],
+        },
+      ],
+      response_format: { type: "json_schema", json_schema: FOOD_JSON_SCHEMA },
+      // Free-tier vision quota is ~1000 output tokens/min; a food list fits in 700.
+      max_completion_tokens: 700,
+    }),
+  );
   return parseResult(res.choices[0]?.message?.content ?? null);
 }
 
 /** Parse a free-text meal description ("2 яйца и тост") into food items. */
-export async function parseFoodFromText(
-  text: string,
-  model: string = MODELS.text,
-): Promise<FoodIdentification> {
-  const res = await getOpenAI().chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: `Что я съел: ${text}` },
-    ],
-    response_format: { type: "json_schema", json_schema: FOOD_JSON_SCHEMA },
-  });
+export async function parseFoodFromText(text: string): Promise<FoodIdentification> {
+  const res = await withModelFallback("text", (model) =>
+    getAI().chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `Что я съел: ${text}` },
+      ],
+      response_format: { type: "json_schema", json_schema: FOOD_JSON_SCHEMA },
+    }),
+  );
   return parseResult(res.choices[0]?.message?.content ?? null);
 }
 
 /** Transcribe a voice recording to text via Whisper. */
 export async function transcribeAudio(file: File): Promise<string> {
-  const res = await getOpenAI().audio.transcriptions.create({
-    model: MODELS.transcribe,
-    file,
-  });
+  const res = await withModelFallback("transcribe", (model) =>
+    getAI().audio.transcriptions.create({
+      model,
+      file,
+      // Biases Whisper toward food vocabulary and portion words.
+      prompt: "Что я съел: продукты, блюда, граммы, порции.",
+    }),
+  );
   return res.text;
 }

@@ -7,14 +7,11 @@ export const maxDuration = 30;
 /** POST { text } -> { items: IdentifiedItem[] } */
 export async function POST(req: NextRequest) {
   try {
-    const { text, model } = (await req.json()) as {
-      text?: string;
-      model?: string;
-    };
+    const { text } = (await req.json()) as { text?: string };
     if (!text?.trim()) {
       return NextResponse.json({ error: "Пустой текст" }, { status: 400 });
     }
-    const result = await parseFoodFromText(text, model || undefined);
+    const result = await parseFoodFromText(text);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

@@ -7,9 +7,9 @@ Local-first, offline-capable, single-user.
 ## Features
 
 **Tracking**
-- 📷 **AI photo scan** — point the camera at food, GPT-4o identifies items + portions
+- 📷 **AI photo scan** — camera or gallery photo, a Groq vision model identifies items + portions
 - 🎤 **Voice logging** — describe your meal, Whisper transcribes → parsed into foods
-- ⌨️ **Text** & 🔍 **search** (Open Food Facts) & ▦ **barcode** (Open Food Facts)
+- 🔍 **Search** (Open Food Facts / USDA), "same as yesterday", recents & favorites
 - Editable result cards (grams, cooking-method oil adjustment), favorites & one-tap re-log
 - Calories ring + macro bars, water tracking, per-day history navigation
 - Weight log, 14-day calorie chart, averages, 5-week consistency calendar
@@ -27,7 +27,7 @@ Local-first, offline-capable, single-user.
 ## Stack
 
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · **Dexie/IndexedDB** (local-first) ·
-OpenAI (vision/whisper/text) · Recharts · Quagga2 (barcode) · Vitest
+Groq via the `openai` SDK (vision/whisper/text, auto model fallback) · Recharts · Vitest
 
 The whole app renders client-side (`page.tsx` uses `dynamic(..., { ssr: false })`) so IndexedDB
 never touches the server. Next route handlers are thin proxies that hide the OpenAI key and
@@ -37,7 +37,7 @@ proxy nutrition lookups.
 
 ```bash
 npm install
-cp .env.example .env   # then fill in OPENAI_API_KEY
+cp .env.example .env   # then fill in GROQ_API_KEY
 npm run dev
 ```
 
@@ -50,14 +50,14 @@ Open http://localhost:3000 (camera/mic/PWA install require HTTPS or localhost).
 - `npm run typecheck` — TypeScript
 
 ### Environment
-- `OPENAI_API_KEY` — required for photo/voice/text AI (the `.env` file is gitignored)
+- `GROQ_API_KEY` — required for photo/voice AI (the `.env` file is gitignored)
 - `USDA_FDC_API_KEY` — optional; falls back to Open Food Facts when unset/unreachable
 
 ## Architecture
 
 ```
 src/
-  app/            Next routes + API proxies (scan / transcribe / parse-food / food search / barcode)
+  app/            Next routes + API proxies (scan / transcribe / parse-food / food search)
   components/     UI primitives, toast, service-worker register
   features/       onboarding · dashboard · add-entry · character (RPG) · progress · settings
   lib/

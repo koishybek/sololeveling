@@ -93,15 +93,15 @@ export function InstallPrompt() {
       <button
         aria-label="Закрыть"
         onClick={dismiss}
-        className="absolute inset-0 cursor-default bg-[rgba(46,46,51,0.35)] backdrop-blur-md"
+        className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-md"
       />
       <div
         className="relative z-10 mx-auto w-full max-w-md rounded-t-sheet bg-surface px-6 pt-3.5 [animation:sheetUp_.28s_cubic-bezier(.2,.8,.2,1)]"
         style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
       >
-        <div className="mx-auto mb-5 h-[5px] w-[38px] rounded-full bg-[#DBD9D1]" />
+        <div className="mx-auto mb-5 h-[5px] w-[38px] rounded-full bg-track" />
         <div className="flex flex-col items-center text-center">
-          <div className="grid size-14 place-items-center rounded-[16px] bg-accent text-white shadow-card">
+          <div className="grid size-14 place-items-center rounded-[16px] bg-accent text-on-accent shadow-card">
             <Icon name="leaf" size={28} />
           </div>
           <h2 className="mt-3 text-[22px] font-bold">Установи {APP_NAME}</h2>
@@ -117,7 +117,7 @@ export function InstallPrompt() {
         ) : platform === "ios" ? (
           <div className="mt-5 space-y-2.5">
             <Step n={1}>
-              Нажми <Icon name="share" size={16} className="mx-1 inline text-accent-hover" />{" "}
+              Нажми <Icon name="share" size={16} className="mx-1 inline text-accent" />{" "}
               «Поделиться» внизу Safari
             </Step>
             <Step n={2}>Выбери «На экран „Домой“»</Step>
@@ -126,7 +126,7 @@ export function InstallPrompt() {
         ) : (
           <div className="mt-5 space-y-2.5">
             <Step n={1}>
-              Открой меню <Icon name="dots" size={16} className="mx-1 inline text-accent-hover" /> в браузере
+              Открой меню <Icon name="dots" size={16} className="mx-1 inline text-accent" /> в браузере
             </Step>
             <Step n={2}>Выбери «Установить приложение» / «Добавить на главный экран»</Step>
           </div>
@@ -147,7 +147,7 @@ export function InstallPrompt() {
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl bg-surface-2 px-4 py-3">
-      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent text-[12px] font-bold text-white">
+      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent text-[12px] font-bold text-on-accent">
         {n}
       </span>
       <span className="text-[14px]">{children}</span>

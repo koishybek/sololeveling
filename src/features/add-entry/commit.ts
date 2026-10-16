@@ -30,9 +30,12 @@ export function draftMacros(d: DraftItem): Macros100g {
   };
 }
 
-/** Persist all drafts as log entries under the given meal (today). */
-export async function commitDrafts(drafts: DraftItem[], meal: Meal): Promise<void> {
-  const date = dayKey();
+/** Persist all drafts as log entries under the given meal and day. */
+export async function commitDrafts(
+  drafts: DraftItem[],
+  meal: Meal,
+  date: string = dayKey(),
+): Promise<void> {
   const now = Date.now();
   for (const d of drafts) {
     const food = await upsertFood({

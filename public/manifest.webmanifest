@@ -1,12 +1,12 @@
 {
   "name": "Calora — трекер калорий",
   "short_name": "Calora",
-  "description": "Считай калории легко: фото, голос, текст, штрихкод",
+  "description": "Считай калории легко: фото, голос и поиск",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f8f7f3",
-  "theme_color": "#f8f7f3",
+  "background_color": "#141416",
+  "theme_color": "#141416",
   "orientation": "portrait",
   "lang": "ru",
   "icons": [

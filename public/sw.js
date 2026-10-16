@@ -1,5 +1,5 @@
 // Minimal offline-first service worker for the E-Rank PWA.
-const CACHE = "olzhas-erank-v1";
+const CACHE = "calora-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {

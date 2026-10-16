@@ -1,53 +1,57 @@
 @import "tailwindcss";
 
-/* ── Calora — light design system ───────────────────────────
-   Source of truth: "Calora - Design System.dc.html". Warm cream
-   background, sage-green brand, coral/amber/teal macros. Light only. */
+/* ── Calora — dark design system ────────────────────────────
+   Near-black page, charcoal cards, bright green brand (Lifesum-like
+   look). Dark only. */
 @theme {
   /* Surfaces */
-  --color-base: #f8f7f3; /* page background (warm white) */
-  --color-surface: #ffffff; /* cards */
-  --color-surface-2: #f1f0eb; /* secondary fills: segmented bg, chips */
-  --color-track: #eceae3; /* progress-bar tracks */
-  --color-border: #edebe4; /* hairline */
-  --color-fg: #2e2e33; /* ink / primary text */
-  --color-muted: #9ca3af; /* muted text */
+  --color-base: #141416; /* page background */
+  --color-surface: #252527; /* cards */
+  --color-surface-2: #1b1b1d; /* inset fills: inputs, chips, round buttons */
+  --color-surface-3: #323235; /* raised fills: active pills */
+  --color-track: #38383b; /* progress-bar tracks */
+  --color-border: #2f2f32; /* hairline */
+  --color-fg: #f4f4f6; /* primary text */
+  --color-muted: #9a9aa0; /* muted text */
 
-  /* Brand — sage */
-  --color-accent: #5fb88e;
-  --color-accent-hover: #4ea579; /* sage-dark */
-  --color-accent-active: #458f68;
-  --color-accent-soft: #e6f2ea; /* sage-soft tint */
+  /* Brand — bright green */
+  --color-accent: #44d660;
+  --color-accent-hover: #3bc455;
+  --color-accent-active: #31ad49;
+  --color-accent-soft: #1d3324;
+  --color-on-accent: #0c1a0f; /* text/icons on green */
+  --color-warn: #ff9f2e;
 
   /* Macros + soft tints */
-  --color-protein: #f59e8b;
-  --color-protein-soft: #fce6e1;
-  --color-carb: #f5c06b;
-  --color-carb-soft: #fbefd6;
-  --color-fat: #7bc4c0;
-  --color-fat-soft: #e2f1f0;
+  --color-protein: #ff6b85;
+  --color-protein-soft: #3a1f27;
+  --color-carb: #7a8cff;
+  --color-carb-soft: #1f2442;
+  --color-fat: #b48cff;
+  --color-fat-soft: #2b2242;
 
   /* Status */
-  --color-success: #5fb88e;
-  --color-danger: #e4736b;
+  --color-success: #44d660;
+  --color-danger: #ff5f57;
 
   /* Radius */
   --radius-btn: 16px;
-  --radius-card: 20px;
+  --radius-card: 18px;
   --radius-sheet: 24px;
 
-  /* Elevation — one soft low shadow for cards + a lift */
-  --shadow-card: 0 6px 20px rgba(46, 46, 51, 0.06);
-  --shadow-lift: 0 10px 28px rgba(46, 46, 51, 0.1);
+  /* Elevation */
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --shadow-lift: 0 10px 28px rgba(0, 0, 0, 0.45);
 
   /* Type */
   --font-sans: var(--font-onest), "Onest", -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-lora), "Lora", Georgia, "Times New Roman", serif;
 }
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
   }
   html,
   body {

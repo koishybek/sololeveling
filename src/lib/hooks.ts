@@ -52,11 +52,13 @@ export function useRecentFoods(limit = 10): FoodItem[] | undefined {
       .reverse()
       .limit(60)
       .toArray();
+    // Dedupe by name: older data has one food row per log of the same product.
     const seen = new Set<string>();
     const ids: string[] = [];
     for (const e of recent) {
-      if (!seen.has(e.foodId)) {
-        seen.add(e.foodId);
+      const k = e.foodName.trim().toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
         ids.push(e.foodId);
       }
       if (ids.length >= limit) break;

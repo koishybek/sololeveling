@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Onest } from "next/font/google";
+import { Lora, Onest } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 import { Toaster } from "@/components/toast";
 import { APP_NAME } from "@/lib/app";
@@ -11,14 +11,20 @@ const onest = Onest({
   display: "swap",
 });
 
+const lora = Lora({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-lora",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: `${APP_NAME} — трекер калорий`,
-  description: "Считай калории легко: логируй еду фото, голосом, текстом или штрихкодом.",
+  description: "Считай калории легко: логируй еду по фото, голосом или через поиск.",
   manifest: "/manifest.webmanifest",
   applicationName: APP_NAME,
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: APP_NAME,
   },
   icons: {
@@ -28,7 +34,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f8f7f3",
+  themeColor: "#141416",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -40,7 +46,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" className={onest.variable} suppressHydrationWarning>
+    <html lang="ru" className={`${onest.variable} ${lora.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
         {children}
         <ServiceWorkerRegister />

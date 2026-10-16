@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Button, Card, NumberField, SegmentedControl, TextInput, Toggle } from "@/components/ui";
+import { Button, Card, NumberField, SegmentedControl, Toggle } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { db } from "@/lib/db/db";
-import { dayKey, resetAll, saveProfile, setDailyGoal } from "@/lib/db/repo";
+import { dayKey, patchSettings, resetAll, saveProfile, setDailyGoal } from "@/lib/db/repo";
 import { downloadBackup, importBackupFile } from "@/lib/backup";
 import type { Profile as ProfileType } from "@/lib/db/types";
 import { computePlan } from "@/lib/nutrition/calories";
@@ -41,8 +41,6 @@ export function Profile({ profile }: { profile: ProfileType }) {
   const [sex, setSex] = useState<Sex>("male");
   const [goal, setGoal] = useState<Goal>("lose");
   const [activity, setActivity] = useState<ActivityLevel>("sedentary");
-  const [visionModel, setVisionModel] = useState("gpt-4o");
-  const [textModel, setTextModel] = useState("gpt-4o-mini");
   const [paywall, setPaywall] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -55,13 +53,6 @@ export function Profile({ profile }: { profile: ProfileType }) {
     setGoal(profile.goal);
     setActivity(profile.activity);
   }, [profile]);
-
-  useEffect(() => {
-    if (settings) {
-      setVisionModel(settings.aiVisionModel || "gpt-4o");
-      setTextModel(settings.aiTextModel || "gpt-4o-mini");
-    }
-  }, [settings]);
 
   const remindersOn = settings?.remindersEnabled ?? false;
 
@@ -99,29 +90,9 @@ export function Profile({ profile }: { profile: ProfileType }) {
     toast("Профиль и план обновлены", "success");
   }
 
-  async function saveModels() {
-    await db.settings.put({
-      id: "app",
-      theme: "dark",
-      units: "metric",
-      aiVisionModel: visionModel.trim() || "gpt-4o",
-      aiTextModel: textModel.trim() || "gpt-4o-mini",
-      waterTargetMl: settings?.waterTargetMl ?? 2500,
-      remindersEnabled: settings?.remindersEnabled ?? false,
-    });
-    toast("Модели сохранены", "success");
-  }
-
   async function setReminders(on: boolean) {
-    await db.settings.put({
-      id: "app",
-      theme: "dark",
-      units: "metric",
-      aiVisionModel: settings?.aiVisionModel ?? "gpt-4o",
-      aiTextModel: settings?.aiTextModel ?? "gpt-4o-mini",
-      waterTargetMl: settings?.waterTargetMl ?? 2500,
-      remindersEnabled: on,
-    });
+    // Patch, don't overwrite — the row also holds backup timestamps.
+    await patchSettings({ remindersEnabled: on });
   }
 
   async function doExport() {
@@ -150,20 +121,20 @@ export function Profile({ profile }: { profile: ProfileType }) {
   }
 
   return (
-    <div className="px-4 pt-6">
-      <h1 className="mb-5 text-[26px] font-bold tracking-tight">Профиль</h1>
+    <div className="px-4 pt-[max(1.5rem,env(safe-area-inset-top))]">
+      <h1 className="mb-5 font-display text-[30px] font-medium tracking-tight">Профиль</h1>
 
       {/* Pro upsell */}
       <button
         onClick={() => setPaywall(true)}
-        className="mb-5 flex w-full items-center gap-3 rounded-card bg-accent p-4 text-left text-white shadow-[0_8px_20px_rgba(95,184,142,0.3)]"
+        className="mb-5 flex w-full items-center gap-3 rounded-card bg-accent p-4 text-left text-on-accent shadow-[0_8px_20px_rgba(68,214,96,0.25)]"
       >
-        <div className="grid size-11 shrink-0 place-items-center rounded-full bg-white/20">
+        <div className="grid size-11 shrink-0 place-items-center rounded-full bg-black/10">
           <Icon name="leaf" size={22} />
         </div>
         <div className="flex-1">
           <div className="text-[16px] font-bold">{APP_NAME} Pro</div>
-          <div className="text-[13px] text-white/85">Безлимит и расширенная аналитика</div>
+          <div className="text-[13px] text-on-accent/80">Безлимит и расширенная аналитика</div>
         </div>
         <Icon name="chevron-right" size={20} />
       </button>
@@ -188,7 +159,7 @@ export function Profile({ profile }: { profile: ProfileType }) {
               onClick={() => setActivity(a.key)}
               className={cn(
                 "rounded-full px-3.5 py-2 text-[13px] font-medium transition",
-                activity === a.key ? "bg-accent text-white" : "bg-surface-2 text-muted",
+                activity === a.key ? "bg-accent text-on-accent" : "bg-surface-2 text-muted",
               )}
             >
               {a.label}
@@ -217,18 +188,19 @@ export function Profile({ profile }: { profile: ProfileType }) {
         </div>
       </Section>
 
-      <Section title="AI-модели (OpenAI)">
-        <Field label="Зрение (фото)">
-          <TextInput value={visionModel} onChange={setVisionModel} placeholder="gpt-4o" />
-        </Field>
-        <div className="mt-2">
-          <Field label="Текст / голос-разбор">
-            <TextInput value={textModel} onChange={setTextModel} placeholder="gpt-4o-mini" />
-          </Field>
+      <Section title="ИИ-распознавание">
+        <div className="flex items-start gap-3">
+          <div className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+            <Icon name="sparkles" size={20} />
+          </div>
+          <div className="text-[14px] leading-snug">
+            <div className="font-semibold">Модели выбираются автоматически</div>
+            <div className="mt-0.5 text-muted">
+              Фото, голос и разбор еды идут через Groq. Если у модели кончился
+              лимит, приложение само переключается на следующую.
+            </div>
+          </div>
         </div>
-        <Button variant="secondary" className="mt-3 w-full" onClick={saveModels}>
-          Сохранить модели
-        </Button>
       </Section>
 
       <Section title="Данные">
@@ -269,7 +241,7 @@ export function Profile({ profile }: { profile: ProfileType }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-5">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[1.5px] text-accent">
+      <div className="mb-2 text-[13px] font-semibold uppercase tracking-[1.5px] text-muted">
         {title}
       </div>
       <Card>{children}</Card>

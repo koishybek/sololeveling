@@ -43,20 +43,6 @@ function mapProduct(p: OffProduct, code: string): ResolvedFood {
   };
 }
 
-/** Look up a barcode via Open Food Facts (live per-scan). Returns null if not found. */
-export async function offBarcode(code: string): Promise<ResolvedFood | null> {
-  const url = `${OFF_BASE}/api/v2/product/${encodeURIComponent(code)}?fields=${OFF_FIELDS}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA },
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!res.ok) return null;
-
-  const data = (await res.json()) as { status?: number; product?: OffProduct };
-  if (data.status !== 1 || !data.product) return null;
-  return mapProduct(data.product, code);
-}
-
 /** Free-text product search via Open Food Facts. */
 export async function offSearch(query: string, limit = 20): Promise<ResolvedFood[]> {
   const url =

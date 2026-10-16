@@ -56,7 +56,7 @@ export function Toaster() {
             t.type === "error"
               ? "bg-danger text-white"
               : t.type === "success"
-                ? "bg-accent text-white"
+                ? "bg-accent text-on-accent"
                 : "bg-surface text-fg shadow-card",
           )}
         >

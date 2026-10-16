@@ -36,7 +36,7 @@ export function Paywall({ open, onClose }: { open: boolean; onClose: () => void 
 
       <div className="flex flex-1 flex-col px-6 pb-8">
         <div className="mt-2 flex flex-col items-center text-center">
-          <div className="grid size-16 place-items-center rounded-[18px] bg-accent text-white shadow-card">
+          <div className="grid size-16 place-items-center rounded-[18px] bg-accent text-on-accent shadow-card">
             <Icon name="leaf" size={32} />
           </div>
           <h1 className="mt-4 text-[30px] font-bold leading-tight tracking-tight">
@@ -50,7 +50,7 @@ export function Paywall({ open, onClose }: { open: boolean; onClose: () => void 
         <ul className="mt-7 space-y-3">
           {FEATURES.map((f) => (
             <li key={f} className="flex items-center gap-3">
-              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-hover">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
                 <Icon name="check" size={14} strokeWidth={2.6} />
               </span>
               <span className="text-[15px]">{f}</span>
@@ -121,7 +121,7 @@ function PlanCard({
       )}
     >
       {badge && (
-        <span className="absolute -top-2.5 left-4 rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-semibold text-white">
+        <span className="absolute -top-2.5 left-4 rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-semibold text-on-accent">
           {badge}
         </span>
       )}

@@ -35,7 +35,8 @@ export function Foods() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Ошибка поиска");
       setResults(d.foods ?? []);
-      if (!d.foods?.length) setError("Ничего не найдено");
+      if (d.error) setError(d.error);
+      else if (!d.foods?.length) setError("Ничего не найдено");
     } catch {
       setError("Нет соединения — проверь сеть");
     } finally {
@@ -52,6 +53,7 @@ export function Foods() {
       brand: f.brand,
       per100g: f.per100g,
       isWholeFood: f.isWholeFood,
+      imageUrl: f.imageUrl,
     });
     await addLogEntry({ food, grams: 100, meal: defaultMeal() });
     toast(`${f.name} · 100 г в дневник`, "success");
@@ -63,8 +65,8 @@ export function Foods() {
   }
 
   return (
-    <div className="px-4 pt-6">
-      <h1 className="text-[26px] font-bold tracking-tight">Продукты</h1>
+    <div className="px-4 pt-[max(1.5rem,env(safe-area-inset-top))]">
+      <h1 className="font-display text-[30px] font-medium tracking-tight">Продукты</h1>
       <p className="mt-1 text-[14px] text-muted">Найди продукт или добавь из недавних в один тап.</p>
 
       <div className="mt-4 flex gap-2">
@@ -140,7 +142,7 @@ export function Foods() {
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mt-5">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[1.5px] text-accent">
+      <div className="mb-3 text-[13px] font-semibold uppercase tracking-[1.5px] text-muted">
         {title}
       </div>
       <div className="space-y-2">{children}</div>
@@ -165,7 +167,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-card bg-surface p-3 shadow-card">
-      <FoodThumb imageUrl={imageUrl} name={name} size={44} />
+      <FoodThumb imageUrl={imageUrl} name={name} size={44} className="rounded-full" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] font-semibold">{name}</div>
         <div className="text-[12px] text-muted">{kcal100} ккал / 100 г</div>
@@ -174,15 +176,15 @@ function Row({
         <button
           onClick={onFav}
           aria-label="В избранное"
-          className={faved ? "text-carb" : "text-muted"}
+          className={faved ? "text-protein" : "text-muted"}
         >
-          <Icon name="star" size={20} filled={faved} />
+          <Icon name="heart" size={20} filled={faved} />
         </button>
       )}
       <button
         onClick={onAdd}
         aria-label="Добавить в дневник"
-        className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-white transition active:scale-90"
+        className="grid size-10 shrink-0 place-items-center rounded-full bg-surface-2 text-fg transition active:scale-90"
       >
         <Icon name="plus" size={17} strokeWidth={2.4} />
       </button>

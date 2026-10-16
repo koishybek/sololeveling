@@ -222,7 +222,7 @@ export function Onboarding() {
         {current === "intro" && (
           <div className="flex flex-1 flex-col justify-center gap-7 py-6 text-center">
             <div className="flex flex-col items-center gap-4">
-              <div className="grid size-16 place-items-center rounded-[18px] bg-accent text-white shadow-card">
+              <div className="grid size-16 place-items-center rounded-[18px] bg-accent text-on-accent shadow-card">
                 <Icon name="leaf" size={32} />
               </div>
               <div>
@@ -249,7 +249,7 @@ export function Onboarding() {
             />
 
             {demoBusy && (
-              <div className="flex items-center justify-center gap-2 text-[14px] font-medium text-accent-hover">
+              <div className="flex items-center justify-center gap-2 text-[14px] font-medium text-accent">
                 <span className="size-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
                 ИИ смотрит на фото…
               </div>
@@ -298,7 +298,7 @@ export function Onboarding() {
                       <div className="mt-0.5 text-[14px] leading-snug text-muted">{g.desc}</div>
                     </div>
                     {goal === g.key && (
-                      <div className="grid size-7 shrink-0 place-items-center rounded-full bg-accent text-white">
+                      <div className="grid size-7 shrink-0 place-items-center rounded-full bg-accent text-on-accent">
                         <Icon name="check" size={16} strokeWidth={2.6} />
                       </div>
                     )}
@@ -416,7 +416,7 @@ export function Onboarding() {
               <MacroPill iconName="drop" label="Жиры" value={`${plan.macros.fatG} г`} color="var(--color-fat)" softBg="var(--color-fat-soft)" />
             </div>
             <div className="flex w-full items-center gap-3 rounded-card bg-surface p-4 shadow-card">
-              <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-hover">
+              <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
                 <Icon name={goal === "gain" ? "dumbbell" : goal === "maintain" ? "scale" : "trend-down"} size={22} />
               </div>
               <div className="text-left text-[15px] font-semibold">

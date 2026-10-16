@@ -38,7 +38,13 @@ export type IconName =
   | "scale"
   | "dumbbell"
   | "share"
-  | "dots";
+  | "dots"
+  | "book"
+  | "heart"
+  | "clock"
+  | "image"
+  | "verified"
+  | "stop";
 
 const PATHS: Record<IconName, string> = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
@@ -86,6 +92,15 @@ const PATHS: Record<IconName, string> = {
   share:
     '<path d="M12 15V3"/><path d="M8 7l4-4 4 4"/><path d="M6 11H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1"/>',
   dots: '<circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>',
+  book: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v18"/><path d="m12 11 1.5 1.5L17 9"/>',
+  heart:
+    '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  image:
+    '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="9.5" r="1.8"/><path d="m21 16-5-5-9 9"/>',
+  verified:
+    '<path d="M12 2.5 14.4 4l2.8-.2.9 2.7 2.3 1.6-.9 2.7.9 2.7-2.3 1.6-.9 2.7-2.8-.2L12 19.5 9.6 18l-2.8.2-.9-2.7-2.3-1.6.9-2.7-.9-2.7 2.3-1.6.9-2.7 2.8.2Z"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2.5"/>',
 };
 
 export function Icon({

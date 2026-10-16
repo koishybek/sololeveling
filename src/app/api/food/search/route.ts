@@ -7,8 +7,8 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/food/search?q=... -> { foods: ResolvedFood[], source }
- * Prefers USDA when a real API key is configured (and reachable), otherwise
- * falls back to Open Food Facts (works without a key).
+ * Prefers USDA when a real API key is configured, otherwise Open Food Facts;
+ * falls back to the other source when the first fails or finds nothing.
  */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")?.trim();
@@ -16,28 +16,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Нет запроса", foods: [] }, { status: 400 });
   }
 
+  // Preferred source first; if it fails or finds nothing, try the other one
+  // (OFF has outages; USDA works with DEMO_KEY when no key is configured).
+  const order = process.env.USDA_FDC_API_KEY ? (["usda", "off"] as const) : (["off", "usda"] as const);
   let foods: ResolvedFood[] = [];
-  let source = "off";
-
-  if (process.env.USDA_FDC_API_KEY) {
+  let source: string = order[0];
+  let failed = 0;
+  for (const src of order) {
     try {
-      foods = await usdaSearch(q, 12);
-      source = "usda";
+      foods = src === "usda" ? await usdaSearch(q, 12) : await offSearch(q, 16);
+      source = src;
+      if (foods.length) break;
     } catch {
-      /* USDA unreachable / rate-limited — fall through to OFF */
+      failed++;
     }
   }
-
-  if (!foods.length) {
-    try {
-      foods = await offSearch(q, 16);
-      source = "off";
-    } catch {
-      return NextResponse.json(
-        { foods: [], source, error: "Источник питания временно недоступен" },
-        { status: 200 },
-      );
-    }
+  if (!foods.length && failed === order.length) {
+    return NextResponse.json(
+      { foods: [], source, error: "Базы продуктов временно недоступны — попробуй фото" },
+      { status: 200 },
+    );
   }
 
   return NextResponse.json({ foods, source });

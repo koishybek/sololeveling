@@ -32,9 +32,8 @@
 | Стили | **Tailwind CSS v4** (без конфиг-файла; токены темы в `globals.css` через `@theme`) |
 | Хранилище | **Dexie 4 / IndexedDB** — локально на устройстве (local-first, без бэкенда БД) |
 | Реактивность БД | `dexie-react-hooks` (`useLiveQuery`) |
-| ИИ | **OpenAI** (`openai` v6) — зрение, речь, текст, «Система» |
+| ИИ | **Groq** через SDK `openai` v6 (OpenAI-совместимый API) — зрение, речь, текст; авто-фолбэк моделей |
 | Графики | **Recharts 3** |
-| Штрихкоды | `@ericblade/quagga2` (сканер по камере) |
 | Тесты | **Vitest 4** + `fake-indexeddb` (юнит), Playwright (E2E, real Chromium) |
 | Хостинг | **Vercel** |
 
@@ -60,7 +59,7 @@
   `useLiveQuery` (это ридер). Все записи-инициализации — в `useEffect`. Нарушение
   этого правила ранее роняло приложение.
 
-**Деплой:** `.env` в `.gitignore` и в прод НЕ уезжает. `OPENAI_API_KEY` задан как
+**Деплой:** `.env` в `.gitignore` и в прод НЕ уезжает. `GROQ_API_KEY` задан как
 переменная окружения в Vercel (production/preview/development). Редеплой:
 `vercel --prod --yes` из корня проекта.
 
@@ -128,14 +127,14 @@
 - ⚙ вверху → Настройки.
 
 ### 5.3 Добавление еды (лист по кнопке «+»)
-Пять способов ввода, все ведут к редактируемым «черновикам» перед сохранением:
-1. **📷 Фото** — снимок/выбор → `/api/scan` (GPT-4o зрение) → список блюд+граммы.
-2. **🎤 Голос** — запись с микрофона → `/api/transcribe` (Whisper) → текст →
-   `/api/parse-food` → блюда.
-3. **⌨️ Текст** — «200 г куриной грудки и рис» → `/api/parse-food` → блюда.
-4. **🔍 Поиск в базе** — Open Food Facts (точные числа для брендов).
-5. **▦ Штрихкод** — камера (Quagga2) → `/api/food/barcode` → продукт.
-   Плюс **избранное** и **недавние** для ре-лога в один тап.
+Полноэкранный экран (в стиле Lifesum), открывается с «+» в навигации или с «+»
+у конкретного приёма пищи (тогда пишет в этот приём и в просматриваемый день):
+1. **📷 Камера / 🖼️ Галерея** — фото сжимается до 1280px JPEG → `/api/scan`
+   (зрение Groq) → черновики блюд+граммы.
+2. **🎤 Голос** — запись → `/api/transcribe` (Whisper) → `/api/parse-food` → черновики.
+3. **🔍 Поиск** — мгновенно по своим продуктам + с задержкой по Open Food Facts/USDA.
+   Плюс **«То же, что и вчера?»**, **недавние** (с последней порцией) и **избранное**:
+   «+» добавляет сразу, тап по строке — открывает черновик для правки порции.
 
 Черновик: можно править граммы/приём пищи/способ готовки перед «Добавить N».
 Правка = сигнал `correctionMade` (даёт RPG-очко ИНТ — «обучение Системы»).
@@ -207,27 +206,28 @@
 
 ---
 
-## 8. ИИ-интеграция (OpenAI под капотом)
+## 8. ИИ-интеграция (Groq под капотом)
 
-Клиент: `src/lib/ai/openai.ts` — ленивый серверный клиент, бросает ошибку если
-нет `OPENAI_API_KEY`. Модели переопределяемы через env/настройки:
+Клиент: `src/lib/ai/client.ts` — ленивый серверный клиент Groq
+(`baseURL https://api.groq.com/openai/v1`), бросает ошибку если нет `GROQ_API_KEY`.
+`withModelFallback(task, fn)` идёт по цепочке моделей: при 429 (квота) модель
+уходит на «кулдаун» по `Retry-After`, при 404/5xx/неподдерживаемом формате —
+пробуется следующая. Env `AI_*_MODEL` (через запятую) ставятся в начало цепочки.
 
-| Задача | Модель по умолчанию | Где |
+| Задача | Цепочка по умолчанию | Где |
 |---|---|---|
-| Зрение (фото еды) | `gpt-4o` | `identifyFoodFromImage` |
-| Текст (разбор блюд) | `gpt-4o-mini` | `parseFoodFromText` |
-| Речь (голос → текст) | `whisper-1` | `transcribeAudio` |
-| «Система» (журнал) | `gpt-4o-mini` | `generateSystemFeed` |
+| Зрение (фото еды) | `qwen/qwen3.8-27b` → llama-4 scout → maverick | `identifyFoodFromImage` |
+| Текст (разбор блюд) | `openai/gpt-oss-120b` → `gpt-oss-20b` → `qwen/qwen3.8-27b` | `parseFoodFromText` |
+| Речь (голос → текст) | `whisper-large-v3-turbo` → `whisper-large-v3` | `transcribeAudio` |
 
 Все ответы — **строгий structured output** (JSON Schema, `strict: true`).
 
 **API-роуты (`src/app/api/`):**
 - `POST /api/scan` — `{ image: dataUrl }` → `{ items[] }` (зрение).
 - `POST /api/transcribe` — multipart `{ audio: File }` → `{ text }` (Whisper).
-- `POST /api/parse-food` — `{ text, model? }` → `{ items[] }`.
+- `POST /api/parse-food` — `{ text }` → `{ items[] }`.
 - `POST /api/system` — `{ snapshot, model? }` → `{ notices[], bonusQuest }`.
 - `GET /api/food/search?q=` — `{ foods[], source }` (OFF, опц. USDA).
-- `GET /api/food/barcode?code=` — `{ food }` (OFF) или 404.
 
 Ошибки сети/оффлайн на клиенте маппятся в человеческое «Нет соединения с
 интернетом», а не сырое «Failed to fetch».
@@ -327,18 +327,18 @@ src/
     layout.tsx            — корневой layout, PWA-манифест, Toaster
     app-root.tsx          — оболочка: вкладки, FAB, seed привычек, LevelUpWatcher
     globals.css           — тема Tailwind v4
-    api/{scan,transcribe,parse-food,system,food/search,food/barcode}/route.ts
+    api/{scan,transcribe,parse-food,system,food/search}/route.ts
   features/
     onboarding/           — квиз первого запуска
     dashboard/            — Дневник + редактирование записей
-    add-entry/            — лист добавления (фото/голос/текст/поиск/штрихкод)
+    add-entry/            — экран добавления (фото/галерея/голос/поиск)
     character/            — Статус (RPG) + Журнал Системы + level-up
     progress/             — вес + аналитика (Recharts)
     settings/             — профиль, модели, привычки, бэкап
   lib/
     db/{db,types,repo}.ts — Dexie схема, сущности, репозиторий
     game/engine.ts        — чистый RPG-движок (+ engine.test.ts)
-    ai/{openai,food,system}.ts — клиент и вызовы OpenAI
+    ai/{client,food}.ts — клиент Groq с фолбэком и вызовы
     nutrition/calories.ts — Mifflin-St Jeor, TDEE, БЖУ (+ тесты)
     food-data/{off,usda}.ts — источники продуктов
     analytics.ts          — агрегаты для Прогресса
@@ -368,7 +368,7 @@ PWA: service worker (`public/sw.js`) кэширует оболочку офла�
 
 ## 15. Статус и что дальше
 
-**Готово и в проде:** трекер калорий (фото/голос/текст/поиск/штрихкод),
+**Готово и в проде:** трекер калорий (фото/галерея/голос/поиск),
 онбординг с расчётом нормы, дневник, вода, редактирование, аналитика/графики,
 бэкап; RPG-слой (статы, ранги, квесты, привычки, очки, стрик/штраф, врата,
 недельные вызовы, level-up); ИИ-Журнал Системы; звук/вибро.

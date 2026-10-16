@@ -35,13 +35,30 @@ export function dayKey(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Save a food, reusing an existing row for the same product (same DB
+ * sourceId, or same name) so recents don't duplicate and favorites stick.
+ */
 export async function upsertFood(
   food: Omit<FoodItem, "id" | "createdAt"> & { id?: string },
 ): Promise<FoodItem> {
+  const name = food.name.trim().toLowerCase();
+  const existing = food.id
+    ? await db.foods.get(food.id)
+    : await db.foods
+        .filter((f) =>
+          food.sourceId
+            ? f.source === food.source && f.sourceId === food.sourceId
+            : f.name.trim().toLowerCase() === name,
+        )
+        .first();
   const item: FoodItem = {
+    ...existing,
     ...food,
-    id: food.id ?? newId(),
-    createdAt: Date.now(),
+    imageUrl: food.imageUrl ?? existing?.imageUrl,
+    favorite: existing?.favorite ?? food.favorite,
+    id: existing?.id ?? food.id ?? newId(),
+    createdAt: existing?.createdAt ?? Date.now(),
   };
   await db.foods.put(item);
   return item;
@@ -456,7 +473,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   id: "app",
   theme: "dark",
   units: "metric",
-  aiVisionModel: "gpt-4o",
+  aiVisionModel: "auto",
 };
 
 /** Merge-patch the app settings row (creates it if absent). */
@@ -495,7 +512,7 @@ export async function allocateStat(stat: HabitStat): Promise<void> {
     id: "app" as const,
     theme: "dark" as const,
     units: "metric" as const,
-    aiVisionModel: "gpt-4o",
+    aiVisionModel: "auto",
   };
   const next: AppSettings = { ...s };
   if (stat === "STR") next.allocStr = (s.allocStr ?? 0) + 1;

@@ -83,7 +83,7 @@ export function buildAnalytics(params: {
     const s = sum(es);
     return {
       date,
-      label: date.slice(5).replace("-", "."),
+      label: date.slice(5).split("-").reverse().join("."),
       kcal: s.k,
       goal: goal.kcal,
       logged: es.length > 0,

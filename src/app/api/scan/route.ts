@@ -7,14 +7,11 @@ export const maxDuration = 60;
 /** POST { image: dataUrl } -> { items: IdentifiedItem[] } */
 export async function POST(req: NextRequest) {
   try {
-    const { image, model } = (await req.json()) as {
-      image?: string;
-      model?: string;
-    };
+    const { image } = (await req.json()) as { image?: string };
     if (!image) {
       return NextResponse.json({ error: "Нет изображения" }, { status: 400 });
     }
-    const result = await identifyFoodFromImage(image, model || undefined);
+    const result = await identifyFoodFromImage(image);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

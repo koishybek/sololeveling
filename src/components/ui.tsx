@@ -16,11 +16,11 @@ import { Icon, type IconName } from "./icons";
 type Variant = "primary" | "secondary" | "outline" | "ghost" | "danger";
 
 const SECONDARY =
-  "bg-transparent text-accent-hover shadow-[inset_0_0_0_1.5px_var(--color-accent)] hover:bg-accent-soft";
+  "bg-transparent text-accent shadow-[inset_0_0_0_1.5px_var(--color-accent)] hover:bg-accent-soft";
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    "bg-accent text-white shadow-[0_4px_12px_rgba(95,184,142,0.28)] hover:bg-accent-hover active:bg-accent-active",
+    "bg-accent text-on-accent shadow-[0_4px_14px_rgba(68,214,96,0.25)] hover:bg-accent-hover active:bg-accent-active",
   secondary: SECONDARY,
   outline: SECONDARY, // alias kept while screens migrate
   ghost: "text-fg hover:bg-surface-2",
@@ -317,7 +317,7 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(o.value)}
             className={cn(
               "flex-1 rounded-[10px] py-2 text-[13px] font-semibold transition",
-              active ? "bg-surface text-fg shadow-card" : "text-muted",
+              active ? "bg-surface-3 text-fg shadow-card" : "text-muted",
             )}
           >
             {o.label}
@@ -340,7 +340,7 @@ export function Stepper({
   decDisabled?: boolean;
 }) {
   return (
-    <div className="flex items-center rounded-[14px] border border-border bg-surface">
+    <div className="flex items-center rounded-[14px] border border-border bg-surface-2">
       <button
         onClick={onDec}
         disabled={decDisabled}
@@ -414,7 +414,7 @@ export function Toggle({
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className="relative h-7 w-12 shrink-0 rounded-full transition-colors"
-      style={{ background: checked ? "var(--color-accent)" : "#D6D4CC" }}
+      style={{ background: checked ? "var(--color-accent)" : "var(--color-track)" }}
     >
       <span
         className="absolute top-[3px] size-[22px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,.2)] transition-all"
@@ -427,10 +427,10 @@ export function Toggle({
 export type TagTone = "sage" | "protein" | "carb" | "fat" | "neutral";
 
 const TAG_TONES: Record<TagTone, string> = {
-  sage: "text-accent-hover bg-accent-soft",
-  protein: "text-[#D9694F] bg-protein-soft",
-  carb: "text-[#C8871F] bg-carb-soft",
-  fat: "text-[#3F9793] bg-fat-soft",
+  sage: "text-accent bg-accent-soft",
+  protein: "text-protein bg-protein-soft",
+  carb: "text-carb bg-carb-soft",
+  fat: "text-fat bg-fat-soft",
   neutral: "text-muted bg-surface-2",
 };
 
@@ -491,14 +491,14 @@ export function Sheet({
     <div className="fixed inset-0 z-50 flex flex-col justify-end [animation:fadeIn_.2s_ease]">
       <button
         aria-label="Закрыть"
-        className="absolute inset-0 cursor-default bg-[rgba(46,46,51,0.35)] backdrop-blur-md"
+        className="absolute inset-0 cursor-default bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
       <div
         className="relative z-10 mx-auto max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-sheet bg-surface px-6 pt-3.5 [animation:sheetUp_.28s_cubic-bezier(.2,.8,.2,1)]"
         style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
       >
-        <div className="mx-auto mb-5 h-[5px] w-[38px] rounded-full bg-[#DBD9D1]" />
+        <div className="mx-auto mb-5 h-[5px] w-[38px] rounded-full bg-track" />
         {title && (
           <h2 className="mb-5 text-center text-2xl font-bold">{title}</h2>
         )}
